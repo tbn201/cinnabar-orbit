@@ -1,0 +1,159 @@
+name: OrBit managed client
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified builds for OrBit Launcher
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: orbit-managed-client
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+      version: ${{ steps.release.outputs.version }}
+      release: ${{ steps.release.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          version="$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\([^"]*\)"/\1/p;}' Cargo.toml | head -n 1)"
+          test -n "$version"
+          printf 'commit=%s\nversion=%s\nrelease=orbit-host-%s-%s\n' "$commit" "$version" "${commit:0:12}" "$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+  build:
+    needs: prepare
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: macos-15, target: aarch64-apple-darwin, goos: darwin, goarch: arm64, arch: arm64}
+          - {os: macos-15, target: x86_64-apple-darwin, goos: darwin, goarch: amd64, arch: x86_64}
+          - {os: windows-2025, target: x86_64-pc-windows-msvc, goos: windows, goarch: amd64, arch: x86_64}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      CARGO_BUILD_BUILD_DIR: "{workspace-root}/target"
+      CARGO_INCREMENTAL: "0"
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CINNABAR_BUILD_COMMIT: ${{ needs.prepare.outputs.commit }}
+      CINNABAR_SOURCE_ROOT: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install
+          rustup target add "$CARGO_BUILD_TARGET"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: '**/go.sum'
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - name: Install macOS packaging dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install librsvg
+          printf 'CGO_ENABLED=1\nCGO_CFLAGS=-O2 -g -arch %s\nCGO_CXXFLAGS=-O2 -g -arch %s\nCGO_LDFLAGS=-O2 -g -arch %s\n' '${{ matrix.arch }}' '${{ matrix.arch }}' '${{ matrix.arch }}' >> "$GITHUB_ENV"
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command make -ErrorAction SilentlyContinue)) { choco install make --no-progress -y }
+          Add-Content $env:GITHUB_PATH "$env:ProgramData\chocolatey\bin"
+      - name: Build the managed client
+        run: |
+          set -euo pipefail
+          bin="$PWD/target/$CARGO_BUILD_TARGET/release"
+          suffix=''
+          if [ '${{ runner.os }}' = Windows ]; then suffix=.exe; fi
+          make package-binaries DIST_CORE="$bin/bedrock-core$suffix" LOCAL_SERVER_OUT="$bin/bedrock-local-server$suffix"
+      - name: Package the macOS client
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          bin="$PWD/target/$CARGO_BUILD_TARGET/release"
+          CLIENT="$bin/cinnabar" CORE="$bin/bedrock-core" LOCAL_SERVER="$bin/bedrock-local-server" ASSETC="$bin/assetc" BINARIES="$bin" bash packaging/macos/build-app.sh
+          CODESIGN_IDENTITY='' bash packaging/macos/sign-notarize.sh .local/dist/macos-release/Cinnabar.app
+          bash packaging/check-payload.sh macos .local/dist/macos-release portable
+          lipo .local/dist/macos-release/Cinnabar.app/Contents/MacOS/cinnabar -verify_arch '${{ matrix.arch }}'
+      - name: Package the Windows client
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & packaging/windows/build-installer.ps1 -PortableOnly -Binaries "$env:GITHUB_WORKSPACE/target/$env:CARGO_BUILD_TARGET/release"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify the Windows payload
+        if: runner.os == 'Windows'
+        run: bash packaging/check-payload.sh windows .local/dist/windows-release/payload
+      - name: Create the launcher download
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
+        run: |
+          set -euo pipefail
+          payload=.local/dist/macos-release
+          if [ '${{ runner.os }}' = Windows ]; then payload=.local/dist/windows-release/payload; fi
+          host="$(rustc -vV | sed -n 's/^host: //p')"
+          cargo run --locked -p orbit-runtime --target "$host" -- package "$payload" .local/orbit-downloads "$CARGO_BUILD_TARGET" "$CINNABAR_BUILD_COMMIT" "$VERSION" "$RELEASE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: orbit-runtime-${{ matrix.target }}
+          path: .local/orbit-downloads/*
+          if-no-files-found: error
+          retention-days: 30
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: orbit-runtime-*
+          merge-multiple: true
+          path: .local/orbit-downloads
+      - name: Verify all builds and write the launcher manifest
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
+        run: cargo run --locked -p orbit-runtime -- manifest .local/orbit-downloads "$COMMIT" "$VERSION" "$RELEASE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: orbit-runtime-release
+          path: .local/orbit-downloads/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish the managed client
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE" .local/orbit-downloads/*.zip .local/orbit-downloads/orbit-runtime.json .local/orbit-downloads/SHA256SUMS --draft --target "$COMMIT" --title "OrBit client $VERSION" --notes 'Managed Cinnabar build for OrBit Launcher. The launcher verifies and installs the correct platform archive automatically.'
+          gh release edit "$RELEASE" --draft=false --latest

@@ -76,6 +76,7 @@ members = [
     "tools/cinnabar-mcp",
     "tools/cxb",
     "tools/release-manifest",
+    "tools/orbit-runtime",
 ]
 # The vendored codec is generated and linted upstream; only `protocol` builds it.
 exclude = ["crates/protocol/vendor/bedrock-protocol-1-26-51"]

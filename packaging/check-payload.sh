@@ -18,7 +18,8 @@ case "$platform" in
     macos)
         prefix=Cinnabar.app/Contents/
         resources="${prefix}Resources/"
-        required=(Applications "${prefix}Info.plist" "${resources}Cinnabar.icns")
+        required=("${prefix}Info.plist" "${resources}Cinnabar.icns")
+        [[ "${3:-}" == portable ]] || required+=(Applications)
         while IFS= read -r name; do required+=("${prefix}MacOS/$name"); done < <(runtime_binaries)
         # CodeResources at the top of Contents is the stapled notarization ticket.
         optional=("${prefix}_CodeSignature/CodeResources" "${prefix}CodeResources")
