@@ -83,7 +83,7 @@ your change affects:
 cargo run -p devtool --locked -- verify-affected --base origin/dev
 ```
 
-Contributor rules are in [AGENTS.md](AGENTS.md) and [docs/agents/](docs/agents/).
+Build and verification guidance is in [docs/development/](docs/development/).
 
 ## License
 

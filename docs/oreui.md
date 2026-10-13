@@ -169,7 +169,7 @@ its typed inputs. The saved-accounts picker, which vanilla lacks, is an OreUI mo
 ## Reference screenshots
 
 The PlayCover install can be launched normally from PlayCover to capture reference screenshots
-by hand; do not automate its UI, and keep captures out of git (see `AGENTS.md`).
+by hand; do not automate its UI, and keep captures out of git.
 
 Create New World uses the installed preview and category art, solid form rows and the same native
 choice faces as Settings. Sidebar/form tabs scroll independently and retain their surrounding

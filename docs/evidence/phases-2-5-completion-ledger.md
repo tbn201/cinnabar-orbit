@@ -77,7 +77,7 @@ soul soil remain unmodeled or unresolved.
 
 | Field | Evidence |
 |---|---|
-| Owning plan/task | `docs/superpowers/plans/2026-07-17-phase-3-movement-controls-camera.md`, Tasks 8-14 |
+| Owning plan/task | `docs/implementation/plans/2026-07-17-phase-3-movement-controls-camera.md`, Tasks 8-14 |
 | Deterministic tests | Current integration tranche: 282/282 `cinnabar` library tests and strict all-target/all-feature Clippy green; bounded Phase 3 evidence validator 5/5 green. See `docs/evidence/phase-3-movement-controls-camera.md`. Render frame-clock tests also cover 20 Hz tick flush cadence at 60/120 Hz FIFO and uncapped, with manual recording clock preservation; live movement cadence remains unverified. |
 | Review commit | Pending independent review of the final integration commit. |
 | Live/native witness | Current tranche not run; local BDS, Lunar, Zeqa, LBSG, and matching native gates remain required. |
@@ -123,7 +123,7 @@ and exact native and platform comparison remain open.
 
 | Field | Evidence |
 |---|---|
-| Owning plan/task | `docs/superpowers/plans/2026-07-17-phase-3-movement-controls-camera.md`, Tasks 8-10 and 12-14 |
+| Owning plan/task | `docs/implementation/plans/2026-07-17-phase-3-movement-controls-camera.md`, Tasks 8-10 and 12-14 |
 | Deterministic tests | Atomic interaction identity/reset, real eleven-stage production schedule membership/order, semantic device barriers, all perspectives/camera collision, and gameplay movement/jump/use/look touch targets are green in the 282-test client suite. |
 | Review commit | Pending independent review of the final integration commit. |
 | Live/native witness | Current tranche not run; touch, first/rear/front, collision, local-avatar, and native comparison gates remain required. |

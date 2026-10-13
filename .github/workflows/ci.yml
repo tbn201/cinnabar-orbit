@@ -111,8 +111,8 @@ jobs:
           def standalone_doc(name):
               """Accept only standalone contributor docs outside runtime and architecture inputs."""
               path = PurePosixPath(name)
-              return name in {"README.md", "AGENTS.md", "LICENSE", "THIRD_PARTY_NOTICES.md"} or (
-                  str(path.parent) in {"docs", "docs/agents", "docs/reviews"} and path.suffix == ".md"
+              return name in {"README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"} or (
+                  str(path.parent) in {"docs", "docs/development", "docs/reviews"} and path.suffix == ".md"
               )
 
           comparison = json.loads((Path(os.environ["RUNNER_TEMP"]) / "pr-files.json").read_text())

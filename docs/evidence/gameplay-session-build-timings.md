@@ -34,7 +34,7 @@ The command runs from the frozen source directory:
 
 ```sh
 CARGO_BUILD_JOBS=3 \
-/private/tmp/claude-501/-Users-hashim-Downloads-cinnabar/30f7cca3-953b-4833-843f-34f90cbe1dae/scratchpad/cslot \
+/private/tmp/cinnabar-build/cslot \
   env RUSTC_WRAPPER= CARGO_INCREMENTAL=0 \
   CARGO_TARGET_DIR=/private/tmp/cinnabar-step4-timings/target \
   cargo build --offline --locked -p cinnabar --timings

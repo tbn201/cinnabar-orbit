@@ -16,5 +16,10 @@
 target-*/
 __pycache__/
 
-# Agent worktrees nested in the checkout
-/.claude/worktrees/
+.claude/
+.codex/
+.cursor/
+AGENTS.md
+CLAUDE.md
+.cursorrules
+.github/copilot-instructions.md

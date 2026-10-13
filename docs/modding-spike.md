@@ -19,7 +19,7 @@ CINNABAR_MOD_COMPONENT=/tmp/cinnabar-hello.wasm cargo run -p cinnabar --features
 ```
 
 Route local builds through the shared limiter as required by
-`docs/agents/multi-agent-workflow.md`. No Go core or server is needed for `probe`,
+`docs/development/build-workflow.md`. No Go core or server is needed for `probe`,
 `bench` or the tests. Launching the client still requires its normal pinned carriers.
 No mod is loaded without an environment selection or enabled local registration; builds without `local-mods`
 do not compile Wasmtime and ignore it with a warning.

@@ -40,7 +40,7 @@ working directory. A copied development binary under
 `<isolated-root>/target/debug/cinnabar` uses `<isolated-root>/.local`.
 Prepare compatible carrier copies there and record their hashes.
 On Windows, retain the repository's firewall-approved executable path and follow
-`docs/agents/live-testing.md` before running the client.
+`docs/development/live-testing.md` before running the client.
 
 ```sh
 CINNABAR_STAGE_PROFILE=1 \

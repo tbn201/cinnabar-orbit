@@ -25,9 +25,6 @@ Gate scores: contract 95%, runtime/state 90%, production integration 55%, determ
       `0.543`, with the physics carrier regenerated and its pinned SHA-256 updated.
 - [x] CI runs `tools/bedsimtrace` regeneration and provenance tests as an isolated `GOWORK=off`
       module, enforced by a workflow-contract test.
-- [x] The complete `225b17e..3a06b15` candidate range received an independent Claude Opus
-      4.8/xhigh `APPROVE` verdict after all three Important findings were fixed; no Critical or
-      Important findings remain.
 
 ## Bedsim conformance ledger
 

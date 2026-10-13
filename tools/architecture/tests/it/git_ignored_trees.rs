@@ -39,11 +39,11 @@ fn git_ignored_trees_are_not_scanned() {
         "policy.toml",
         "production_rust_max = 1000\nmodule_root_max = 300\npowershell_max = 800\ntest_max = 1200\n[[crates]]\nname = \"screens\"\npath = \"crates/screens\"\n",
     );
-    write(root, ".gitignore", "/.claude/worktrees/\n");
+    write(root, ".gitignore", "/.worktrees/\n");
     let oversized = "fn f() {}\n".repeat(1001);
     write(
         root,
-        ".claude/worktrees/agent/crates/screens/src/big.rs",
+        ".worktrees/agent/crates/screens/src/big.rs",
         &oversized,
     );
     git(root, &["init", "-q"]);
@@ -52,7 +52,7 @@ fn git_ignored_trees_are_not_scanned() {
     assert!(
         diagnostics
             .iter()
-            .all(|line| !line.contains(".claude/worktrees")),
+            .all(|line| !line.contains(".worktrees")),
         "ignored worktree scanned: {diagnostics:?}"
     );
 

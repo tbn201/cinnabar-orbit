@@ -30,7 +30,7 @@ mod unix {
             repo.git(&["init", "--quiet"]);
             fs::write(
                 repo.root.join(".gitignore"),
-                "target/\n/.claude/worktrees/\n",
+                "target/\n/.worktrees/\n",
             )
             .unwrap();
             repo.git(&["add", ".gitignore"]);
@@ -272,7 +272,7 @@ mod unix {
     fn merged_parent_of_a_nested_registered_worktree_is_kept() {
         let repo = Repo::new();
         let parent = repo.worktree("parent");
-        let child = parent.join(".claude/worktrees/child");
+        let child = parent.join(".worktrees/child");
         repo.git(&[
             "worktree",
             "add",

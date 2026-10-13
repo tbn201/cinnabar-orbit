@@ -10,7 +10,7 @@ cargo bench --locked -p world -p meshing -p chunk-pipeline --features chunk-pipe
 ```
 
 Use the repository-pinned toolchain and the shared build-slot limiter described in
-[the workflow](docs/agents/multi-agent-workflow.md). Run measurements without competing
+[the workflow](development/build-workflow.md). Run measurements without competing
 builds or gameplay. Append a name filter, such as `stored_sections/871`, to select a
 workload; subsequent runs can use `--baseline chunks` for comparison. Results stay
 under the ignored `target/criterion/`.
@@ -43,4 +43,4 @@ cargo bench --locked -p world -p meshing -p chunk-pipeline --features chunk-pipe
 
 These are CPU baselines, not join-time or FPS evidence. They omit socket framing,
 real server terrain, GPU preparation/uploads/draws and the rest of the Bevy frame.
-Native performance acceptance still follows [live testing](docs/agents/live-testing.md).
+Native performance acceptance still follows [live testing](development/live-testing.md).

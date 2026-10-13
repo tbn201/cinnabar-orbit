@@ -3594,10 +3594,6 @@ The same local batch includes independently approved artwork redirect validation
 in `bc5aa862`: redirects retain the initial HTTPS requirement, allow HTTPS CDN
 hosts, and remain bounded. Focused and full Go tests passed.
 
-> **For agentic workers:** This is a program-level master plan. Phases 1–8 are sub-projects;
-> each gets its own detailed task-by-task plan (per superpowers:writing-plans) when its turn
-> comes, executed via superpowers:subagent-driven-development or superpowers:executing-plans.
-> Phase 0 is fully detailed here and is executable directly.
 
 **Goal:** A performant, vanilla-parity Minecraft Bedrock client for macOS/Linux/Windows that
 joins current third-party servers (RakNet), Realms and friend worlds (NetherNet), and creates
@@ -3625,7 +3621,7 @@ Local worlds run dragonfly behind the same core, over the same client path.
 - The loopback game channel is Bedrock packets with length-prefixed framing; no RakNet on this leg. Encryption on this leg: whatever gophertunnel's Listener does by default — do not fork to remove it; AES on loopback is negligible.
 - Single source of truth for protocol/data lives in the Go estate: packet truth = gophertunnel (validated against Mojang bedrock-protocol-docs via `cmd/protocoldrift`); block/item/biome registries = generated exports from dragonfly; client packet defs = valentine (docs-generated), conformance-tested against gophertunnel bytes.
 - New Go types get doc comments at creation (contract on the type, one-liner per method).
-- `lunar` gains at most ONE new consumer (the core). Respect the frozen-facade/ABI rules in `platform/Lunar/AGENTS.md`.
+- `lunar` gains at most ONE new consumer (the core). Preserve the frozen facade and ABI.
 - **Go relay source rule:** copy Lunar's `lunar/internal/relay/relay.go` package logic and
   its relay tests into this repository's Go core (target: `core/internal/relay`), recording
   the exact Lunar source commit. Preserve its forwarding, transfer, resource-pack, and
@@ -3633,7 +3629,6 @@ Local worlds run dragonfly behind the same core, over the same client path.
   local equivalent. **Do not import `github.com/lunar-bedrock/lunar` or add Lunar as a Go
   module dependency; the copied relay package is the only Lunar code the core consumes.**
 - Never edit anything under `refs/` (read-only).
-- Model routing (per workspace CLAUDE.md): bulk/mechanical implementation → gpt-5.5 via codex skills; anything user-facing (UI, menus, copy) and plan/impl reviews → fable-5/opus-4.8 taste bar.
 
 ## Repos and Layout
 
@@ -3720,7 +3715,7 @@ all-target Clippy, formatting, architecture policy, Go core tests/vet, full
 registrygen tests/vet, the Bash acceptance harness, and the macOS/Linux
 no-replace publisher contracts; the Windows auth-cache suite cross-compiles,
 while native PowerShell execution remains the CI matrix's platform gate. A fresh
-Sol-high review of the entire range returned APPROVE with no Critical,
+review of the entire range returned APPROVE with no Critical,
 Important, or Minor findings. No live/native gameplay or visual gate is closed
 by this code-quality tranche.
 
@@ -3786,7 +3781,7 @@ outside git.
 selected-stack authority task head `2a17459881ea5f586b8e1cb937c4ad7337882924` was independently
 approved and integrated as `9d6e291b` plus `d90d8764`. The malformed-inner-wire task head
 `14e2ceedf3fdc58a60141410731605cef03e4f81` completed repeated fix-first review cycles and received
-a final fresh Sol-high `ship` verdict; it is integrated history-preservingly as `2e6feae1`,
+a final fresh `ship` verdict; it is integrated history-preservingly as `2e6feae1`,
 `83198075`, `e0277132`, `1322fb49`, `8e647d01`, and `eb017fac`. Coordinator world, protocol,
 client-world, app, strict Clippy, formatting, architecture, and diff gates passed at the reviewed
 heads. The durable remaining mismatch inventory and exact native/live gates are in
@@ -3807,7 +3802,7 @@ byte-identical to the historical v0.1.4 slice), corrects non-swimming water grav
 the observed water-to-ledge boost only after a bounded clear, dry raised probe. BedSim remains a
 Go reference/oracle used by trace generators; production movement is the Rust `crates/sim` port.
 Fresh coordinator crate suites, formatting, strict Clippy, architecture enforcement, and fresh
-Sol-high review passed for each tranche. These commits close only their bounded implementation
+review passed for each tranche. These commits close only their bounded implementation
 defects; cache ordering/timing, selected-store unification, item rendering, inventory-preview
 geometry and animation, broader actor behavior, exact chunk retention, and native/live acceptance
 remain open.
@@ -4014,9 +4009,7 @@ Immediate execution order:
 This preserved ledger was the authoritative hand-off for its 2026-07-16 branch audit. Its
 audit base is clean `render-integration` commit `1ac547b`, published exactly as
 `github/phase2-textures`; the last functional implementation commit before the workflow
-documentation is `efa5400`. The agent runtime does not expose exact model/version or effort
-selectors, so reviews use the configured runtime default rather than claiming a particular
-model setting.
+documentation is `efa5400`.
 
 At audit time the repository had 65 linked worktrees. Twenty-five worktree heads were
 ancestors of the audit base, 26 more were patch-equivalent or historical, and 14 had
@@ -4205,7 +4198,7 @@ Scope (detailed plan to be written at phase start):
 - Resource-pack negotiation upstream; pack payloads handed to client over the control channel as files in a cache dir (client applies them — Phase 6 renders them).
 - Windows transport flavor (named pipe or TCP) behind the same listener interface.
 - **Conformance harness (promoted from deferral):** `tools/fixturegen` grows to full packet coverage; CI job round-trips gophertunnel↔valentine bytes both directions on every core and defs bump. This is the automated version of spike task 0.4.
-- Consumer-surface work in `platform/Lunar` to expose what the core needs through the facade (measured, minimal, per AGENTS.md ABI rules).
+- Consumer-surface work in `platform/Lunar` to expose what the core needs through the facade (measured, minimal, preserving ABI compatibility).
 
 **Early authenticated RakNet smoke (Zeqa):**
 
@@ -4353,7 +4346,7 @@ Scope: block registry + block-state → model/texture mapping (generated export 
     performance/visual adjudication remain the only completion gate.
 - [ ] **2.6 Static/non-cube models, blend/water, and flipbooks.** Complete the
   remaining block visual classes and animation path per
-  `docs/superpowers/specs/2026-07-11-phase-2-6-noncube-water-design.md`.
+  `docs/implementation/specs/2026-07-11-phase-2-6-noncube-water-design.md`.
   - [x] Pin and securely acquire the exact local-only PMMP, PrismarineJS,
     Axolotl, and Dragonfly evidence bundle. Whole-bundle atomic publication,
     byte/hash/time bounds, junction rejection, concurrent-winner handling,
@@ -5055,7 +5048,7 @@ Scope: block registry + block-state → model/texture mapping (generated export 
       state. Diagnostic/fallback shrinkage is allowed while residual families are
       implemented; the final gate requires zero diagnostic and zero provisional
       fallback non-air states. The accepted design is recorded in
-      `docs/superpowers/specs/2026-07-13-exhaustive-vanilla-coverage-design.md`.
+      `docs/implementation/specs/2026-07-13-exhaustive-vanilla-coverage-design.md`.
       **Complete (2026-07-13):** `visualcoverage` uses the production decoders,
       enforces the exact 1,356-name/16,913-state/one-air protocol corpus and
       exact hash-to-sequential bijection, bounds all inputs, rejects diagnostic
@@ -5350,7 +5343,7 @@ Scope: block registry + block-state → model/texture mapping (generated export 
     independent review are green through `4bf2c8c`; native multi-platform visual
     tuning and parity acceptance remain open.
     The original fixed 3x3 opaque finite-cloud visual behavior is superseded by
-    `docs/superpowers/plans/2026-07-16-native-cloud-parity.md`: exact local-only
+    `docs/implementation/plans/2026-07-16-native-cloud-parity.md`: exact local-only
     1.26.33.1 occupancy, transparent depth-aware legacy composition, directional
     lighting, exact weather contributions, and calibrated native quality controls.
   - [x] Accept the exact local-only Bedrock 1.26.33.1 cloud PNG as an optional
@@ -5701,8 +5694,8 @@ store it only under the user's temporary directory, inspect that file, and never
   grazing angles against matching native reference captures.
   - [x] Record the installed native occupancy/material/config evidence and the
     reviewed greedy packed finite-mesh design/implementation plan in
-    `docs/superpowers/specs/2026-07-15-finite-cloud-mesh-design.md` and
-    `docs/superpowers/plans/2026-07-15-finite-cloud-mesh.md`.
+    `docs/implementation/specs/2026-07-15-finite-cloud-mesh-design.md` and
+    `docs/implementation/plans/2026-07-15-finite-cloud-mesh.md`.
   - [x] Implement and independently review the deterministic periodic CPU
     mesher: exact 256x256 alpha occupancy, toroidal seam culling, greedy exposed
     faces, an eight-byte packed ABI, checked worst-case ceilings, and canonical
@@ -5818,11 +5811,11 @@ tick states; correction/rewind handling (`CorrectPlayerMovePrediction`).
   authority requires the remaining movement strata plus live server-authoritative verification.
 
 - **PR #6 Phase 3 integration record (2026-07-26).** Both independently reviewed lanes landed
-  with history preserved. The input-parity lane `codex/pr6-input-parity` was approved at
-  `c1bb584` after five independent Sol-high review rounds and four fix rounds, with final
+  with history preserved. The input-parity branch was approved at
+  `c1bb584` after five independent review rounds and four fix rounds, with final
   decision `APPROVE` and no findings, then landed as merge `cfdf897`. The correction and
   acceptance lane `agent/pr6-phase3-completion` was approved at `e099529` after six independent
-  Sol-high review rounds and five fix rounds, with final decision `APPROVE` and no findings,
+  review rounds and five fix rounds, with final decision `APPROVE` and no findings,
   then landed as merge `a9593e7`.
   - Post-integration deterministic verification on the merged tree passed:
     `cargo test -p semantic-input --locked` (53 passed);
@@ -6257,8 +6250,7 @@ Scope: block breaking (server-auth crack progress overlay), placement, item use 
 `InventoryTransaction`/`ItemStackRequest`; hotbar + survival/creative inventory + containers
 (chest/furnace/crafting UIs); forms (modal/menu/custom JSON forms — Lunar's ClickUI depends on
 these); chat with Bedrock formatting codes; HUD (health/hunger/armor/air, bossbar, scoreboard,
-title/actionbar); Bedrock bitmap font rendering from pack `font/` assets. Taste bar applies:
-UI phases get fable-5/opus-4.8 review before merge.
+title/actionbar); Bedrock bitmap font rendering from pack `font/` assets.
 
 **Phase 5 roadmap (kept current as work lands):**
 
@@ -6271,7 +6263,7 @@ reconciliation; Java presentation must not invent state that Bedrock does not
 expose. Menus, inventories, containers, forms, controls, and resource-pack JSON
 UI remain Bedrock/resource-pack-driven. The current text/panel renderer is an
 incomplete scaffold until the full state matrix and native/live comparison gates
-below are green. See `AGENTS.md` for the repository-wide gameplay-HUD exception.
+below are green.
 
 Hunger shakes use renderer-local updates and neutral/upward offsets, independent of
 food packet ticks. The complete native HUD motion gallery, including heart timing,
@@ -6742,7 +6734,7 @@ stacks remains open.
 ## Sequencing and program rules
 
 - Order is 0 → 1 → 2 → 3 → (4 ∥ 5) → 6 → 7 → 8. Phases 4 and 5 can run in parallel worktrees once 3 lands (disjoint crates; both consume `crates/world` + `crates/protocol` which are stable by then).
-- Each phase starts by converting its scope block into a full task-by-task plan (superpowers:writing-plans), gets brainstorm-level review if its scope shifted, and ends with the requesting-code-review flow. PR-bot adjudication rules apply throughout.
+- Each phase starts by converting its scope block into a full task-by-task plan, gets brainstorm-level review if its scope shifted, and ends with the requesting-code-review flow. PR-bot adjudication rules apply throughout.
 - Every phase must leave `main` in a runnable state (`app` launches, joins BDS, does everything prior phases delivered) — CI runs the Phase 0 acceptance connect as a smoke test forever.
 - Protocol bumps during the program: deliberate, one task, lockstep — regenerate valentine defs, run conformance, bump core, bump `registrygen` exports, fix findings. Never mid-phase.
 

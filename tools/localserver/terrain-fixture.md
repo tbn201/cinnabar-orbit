@@ -38,5 +38,5 @@ MCP supplies `-dir` and `-addr`; the server retains its `ready`/stdin control
 protocol. Read the camera from the manifest. Client resolution, vsync, and
 the owner's saved render distance belong to the capture configuration, not
 the terrain generator. Keep worlds, binaries, screenshots, and traces out
-of git. See [live testing](../../docs/agents/live-testing.md) and
-[client MCP](../../docs/agents/client-mcp.md) for capture rules.
+of git. See [live testing](../../docs/development/live-testing.md) and
+[client MCP](../../docs/development/client-mcp.md) for capture rules.
