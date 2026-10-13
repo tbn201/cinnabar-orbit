@@ -7,6 +7,7 @@ use bevy::prelude::Resource;
 pub struct ModInteraction {
     pub attack_reach: Option<f32>,
     pub attack_pulse: bool,
+    pub hitbox: Option<client_extensions::modding::orbit_hitbox::HitboxPolicy>,
 }
 
 /// Uses the validated personal override for both actor picking and attack admission.
@@ -198,6 +199,55 @@ mod tests {
         assert_eq!(
             crosshair(&player(2.0), Some(&interaction), None),
             Crosshair::Miss
+        );
+    }
+    #[test]
+    fn expanded_boxes_allow_side_picks_without_bypassing_block_obstruction() {
+        let actor = player(2.0);
+        let policy = client_extensions::modding::orbit_hitbox::HitboxPolicy {
+            expand: true,
+            outlines: true,
+            players: true,
+            mobs: false,
+            padding: 0.5,
+            range: 32.0,
+        };
+        let origin = [0.8, 1.62, 0.0];
+        let direction = [0.0, 0.0, -1.0];
+        assert!(pick_actor(std::iter::once(&actor), None, origin, direction, 3.0).is_none());
+        let hit = gameplay::melee::pick_actor_by(
+            std::iter::once(&actor),
+            |actor| super::super::hitbox::bounds(actor, actor.hit_boxes(), Some(policy), origin),
+            None,
+            origin,
+            direction,
+            3.0,
+        )
+        .expect("expanded side is selectable");
+        assert!(matches!(
+            classify(Some(hit), None, 3.0),
+            Crosshair::Actor(_)
+        ));
+        assert_eq!(classify(Some(hit), Some(0.25), 3.0), Crosshair::Block);
+        let disabled = client_extensions::modding::orbit_hitbox::HitboxPolicy {
+            expand: false,
+            ..policy
+        };
+        assert!(
+            gameplay::melee::pick_actor_by(
+                std::iter::once(&actor),
+                |actor| super::super::hitbox::bounds(
+                    actor,
+                    actor.hit_boxes(),
+                    Some(disabled),
+                    origin
+                ),
+                None,
+                origin,
+                direction,
+                3.0
+            )
+            .is_none()
         );
     }
 }

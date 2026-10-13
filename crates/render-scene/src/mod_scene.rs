@@ -11,6 +11,7 @@ pub struct ModRenderScene {
     primitives: Arc<mod_render::Primitives>,
     pub marker_vertices: Arc<[ModVertex]>,
     position_box: Option<[[f32; 3]; 2]>,
+    hitboxes: Vec<[[f32; 3]; 2]>,
     pub block_vertices: Arc<[ModVertex]>,
     block_positions: Arc<[[i32; 3]]>,
     block_color: [f32; 4],
@@ -45,14 +46,7 @@ impl ModRenderScene {
             return;
         }
         self.position_box = bounds;
-        self.marker_vertices = match bounds {
-            Some(bounds) => {
-                let mut vertices = Vec::with_capacity(position_box::VERTICES);
-                position_box::append(&mut vertices, bounds);
-                vertices.into()
-            }
-            None => Arc::from([]),
-        };
+        self.rebuild_markers();
     }
 
     /// Highlights loaded unit blocks through world geometry, independently of guest primitives.
@@ -77,6 +71,37 @@ impl ModRenderScene {
         }
     }
 
+    pub fn set_hitboxes(&mut self, bounds: &[[[f32; 3]; 2]]) {
+        let bounds: Vec<_> = bounds
+            .iter()
+            .take(mod_api::MAX_OBSERVED_ACTORS * mod_api::MAX_OBSERVED_ACTOR_BOXES)
+            .filter(|bounds| {
+                position_box::valid(bounds)
+                    && bounds
+                        .iter()
+                        .flatten()
+                        .all(|value| value.abs() <= mod_api::MAX_PRIMITIVE_COORDINATE)
+            })
+            .copied()
+            .collect();
+        if self.hitboxes == bounds {
+            return;
+        }
+        self.hitboxes = bounds;
+        self.rebuild_markers();
+    }
+
+    fn rebuild_markers(&mut self) {
+        let mut vertices = Vec::new();
+        if let Some(bounds) = self.position_box {
+            position_box::append(&mut vertices, bounds);
+        }
+        for bounds in &self.hitboxes {
+            position_box::append_outline(&mut vertices, *bounds);
+        }
+        self.marker_vertices = vertices.into();
+    }
+
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -94,3 +119,41 @@ impl ModRenderScene {
 mod block_highlights_tests;
 #[cfg(test)]
 mod position_box_tests;
+
+#[cfg(test)]
+mod hitbox_tests {
+    use super::*;
+    #[test]
+    fn outlines_keep_the_local_marker_and_clear_without_leaving_geometry() {
+        let mut scene = ModRenderScene::default();
+        let bounds = [[0.0; 3], [1.0; 3]];
+        scene.set_position_box(Some(bounds));
+        let local = scene.marker_vertices.len();
+        scene.set_hitboxes(&[bounds]);
+        assert_eq!(
+            scene.marker_vertices.len(),
+            local + position_box::OUTLINE_VERTICES
+        );
+        let cached = Arc::clone(&scene.marker_vertices);
+        scene.set_hitboxes(&[bounds]);
+        assert!(Arc::ptr_eq(&cached, &scene.marker_vertices));
+        scene.set_position_box(None);
+        assert_eq!(scene.marker_vertices.len(), position_box::OUTLINE_VERTICES);
+        scene.set_hitboxes(&[]);
+        assert!(scene.marker_vertices.is_empty());
+    }
+    #[test]
+    fn invalid_boxes_are_rejected_and_geometry_has_a_fixed_budget() {
+        let mut scene = ModRenderScene::default();
+        scene.set_hitboxes(&[[[f32::NAN; 3], [1.0; 3]], [[1.0; 3], [0.0; 3]]]);
+        assert!(scene.marker_vertices.is_empty());
+        let limit = mod_api::MAX_OBSERVED_ACTORS * mod_api::MAX_OBSERVED_ACTOR_BOXES;
+        scene.set_hitboxes(&vec![[[0.0; 3], [1.0; 3]]; limit + 1]);
+        assert_eq!(
+            scene.marker_vertices.len(),
+            limit * position_box::OUTLINE_VERTICES
+        );
+        scene.clear();
+        assert!(scene.marker_vertices.is_empty());
+    }
+}

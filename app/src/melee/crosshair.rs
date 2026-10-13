@@ -80,6 +80,22 @@ pub(super) fn resolve_crosshair(
     let authority = stream.authority();
     let actor = gameplay::melee::pick_actor_by(
         authority.remote_actors().filter(|actor| {
+            #[cfg(feature = "local-mods")]
+            if context
+                .mod_interaction
+                .as_deref()
+                .and_then(|interaction| interaction.hitbox)
+                .is_some_and(|policy| {
+                    policy.expand
+                        && policy.applies(
+                            matches!(actor.kind, protocol::ActorKind::Player { .. }),
+                            actor.position,
+                            origin,
+                        )
+                })
+            {
+                return true;
+            }
             match context.aim.target.map(|target| target.kind) {
                 Some(client_presentation::aim_assist::TargetKind::Actor(id)) => {
                     actor.runtime_id == id
@@ -88,7 +104,24 @@ pub(super) fn resolve_crosshair(
                 None => true,
             }
         }),
-        |actor| authority.pick_hit_boxes(actor),
+        |actor| {
+            #[cfg(feature = "local-mods")]
+            {
+                crate::modding::hitbox::bounds(
+                    actor,
+                    authority.pick_hit_boxes(actor),
+                    context
+                        .mod_interaction
+                        .as_deref()
+                        .and_then(|interaction| interaction.hitbox),
+                    origin,
+                )
+            }
+            #[cfg(not(feature = "local-mods"))]
+            {
+                authority.pick_hit_boxes(actor)
+            }
+        },
         context.ui.gameplay_hud().mount_unique_id(),
         origin,
         ray.direction().to_array(),

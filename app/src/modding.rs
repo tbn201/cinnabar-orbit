@@ -353,7 +353,7 @@ fn drive_mod(
 ) {
     let ModObservation {
         watcher,
-        render_scene,
+        mut render_scene,
         cameras,
         mut frame_rate,
         mut module_observer,
@@ -389,6 +389,10 @@ fn drive_mod(
         return;
     };
     if extension.suspended {
+        interaction.hitbox = None;
+        if let Some(scene) = render_scene.as_mut() {
+            scene.set_hitboxes(&[]);
+        }
         return;
     }
     let mut reloaded = false;
@@ -498,6 +502,23 @@ fn drive_mod(
             );
         }
     }
+    let hitbox = merged.hitbox.filter(|_| {
+        focused
+            && !absorbed
+            && captured
+            && world_observation.as_ref().is_some_and(|world| world.alive)
+    });
+    if let Some(scene) = render_scene.as_mut() {
+        let position = world_observation.as_ref().map_or([0.0; 3], |world| {
+            [world.position.0, world.position.1, world.position.2]
+        });
+        scene.set_hitboxes(&hitbox::outlines(
+            &gameplay,
+            hitbox,
+            ui.gameplay_hud().mount_unique_id(),
+            position,
+        ));
+    }
     render::publish(render_scene, &mut extension);
     if let Some(watcher) = watcher.as_ref() {
         watcher.remember_settings(
@@ -514,6 +535,7 @@ fn drive_mod(
     });
     gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed, &ui);
     gameplay.pulse_jump(merged.jump_pulse && !merged.jump_cancel, &ui);
+    interaction.hitbox = hitbox;
     interaction.attack_reach = merged.attack_reach;
     interaction.attack_pulse = merged.attack_pulse && gameplay.pulse_attack();
     if let Some(delta) = merged.delta {
@@ -540,8 +562,15 @@ fn drive_mod(
     }
     if let Some(mut cues) = cues {
         cues.0 = merged.cues;
-        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 2);
+        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 3);
         let bits = merged.assist_capabilities;
+        cues.0.push(mod_host::ModCue {
+            name: client_extensions::modding::orbit_hitbox::READY.into(),
+            values: vec![
+                1.0,
+                u8::from(bits & client_extensions::modding::orbit_hitbox::CAPABILITY != 0) as f32,
+            ],
+        });
         cues.0.push(mod_host::ModCue {
             name: client_extensions::modding::orbit_protocol::READY.into(),
             values: client_extensions::modding::orbit_protocol::ready_values(bits).to_vec(),
@@ -792,6 +821,8 @@ pub(super) mod fullbright;
 mod gameplay;
 #[cfg(feature = "local-mods")]
 pub(crate) mod ghost;
+#[cfg(feature = "local-mods")]
+pub(crate) mod hitbox;
 #[cfg(feature = "local-mods")]
 mod input;
 #[cfg(feature = "local-mods")]

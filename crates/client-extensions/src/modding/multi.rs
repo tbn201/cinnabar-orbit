@@ -391,6 +391,12 @@ pub fn run_frame(
             })
             .cloned()
             .map(|mut cue| {
+                if cue.name == super::orbit_hitbox::READY {
+                    cue.values = vec![
+                        1.0,
+                        u8::from(available & super::orbit_hitbox::CAPABILITY != 0) as f32,
+                    ];
+                }
                 if cue.name == super::orbit_protocol::READY {
                     cue.values = super::orbit_protocol::ready_values(
                         super::orbit_protocol::capabilities(&cue.values) & available,
@@ -477,6 +483,7 @@ pub struct Merged {
     pub auto_sprint: bool,
     pub debounce_ms: Option<f32>,
     pub open_closet: bool,
+    pub hitbox: Option<super::orbit_hitbox::HitboxPolicy>,
 }
 
 impl Merged {
@@ -527,6 +534,15 @@ impl Merged {
                         }
                     }
                 }
+                super::orbit_hitbox::REQUEST => {
+                    if available & super::orbit_hitbox::CAPABILITY != 0 {
+                        if let Some(policy) = super::orbit_hitbox::HitboxPolicy::parse(&cue.values)
+                        {
+                            self.hitbox.get_or_insert(policy);
+                        }
+                    }
+                }
+                super::orbit_hitbox::READY => {}
                 protocol::COSMETICS => self.open_closet |= controls && cue.values == [1.0],
                 protocol::READY
                 | protocol::AUTO_SPRINT_READY
@@ -547,6 +563,13 @@ fn assist_capabilities(grants: &ModGrants) -> u8 {
         | DEBOUNCE
         | (u8::from(grants.player_state && grants.item_use) * HOTBAR)
         | (u8::from(grants.movement) * (SPRINT | AUTO_SPRINT_CAPABILITY))
+        | (u8::from(
+            grants.player_state
+                && grants.players
+                && grants.entities
+                && grants.interaction
+                && grants.render,
+        ) * super::orbit_hitbox::CAPABILITY)
 }
 
 /// Of mods in load order, each `(may draw, draws)`: the earliest that draws an overlay or view,
@@ -602,5 +625,31 @@ mod assist_tests {
         );
         grants.controls = false;
         assert_eq!(assist_capabilities(&grants), 0);
+    }
+    #[test]
+    fn hitbox_support_requires_render_and_interaction_authority() {
+        let granted = ModGrants {
+            controls: true,
+            player_state: true,
+            players: true,
+            entities: true,
+            interaction: true,
+            render: true,
+            ..ModGrants::default()
+        };
+        let bit = super::super::orbit_hitbox::CAPABILITY;
+        assert_ne!(assist_capabilities(&granted) & bit, 0);
+        for field in 0..6 {
+            let mut missing = granted.clone();
+            match field {
+                0 => missing.controls = false,
+                1 => missing.player_state = false,
+                2 => missing.players = false,
+                3 => missing.entities = false,
+                4 => missing.interaction = false,
+                _ => missing.render = false,
+            }
+            assert_eq!(assist_capabilities(&missing) & bit, 0);
+        }
     }
 }

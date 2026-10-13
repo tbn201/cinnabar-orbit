@@ -125,6 +125,7 @@ fn prepare(
         let capacity = needed.next_power_of_two().min(
             (mod_render::geometry::MAX_VERTICES
                 + super::position_box::VERTICES
+                + mod_render::position_box::MAX_HITBOX_VERTICES
                 + mod_api::MAX_BLOCK_HIGHLIGHTS * super::block_highlights::VERTICES_PER_BLOCK)
                 as u64,
         );

@@ -105,16 +105,36 @@ pub(super) fn current_target(
     let aim = context.aim.as_deref()?;
     let authority = stream.authority();
     let hit = gameplay::melee::pick_actor_by(
-        authority
-            .remote_actors()
-            .filter(|actor| match aim.target.map(|target| target.kind) {
+        authority.remote_actors().filter(|actor| {
+            if interaction
+                .and_then(|interaction| interaction.hitbox)
+                .is_some_and(|policy| {
+                    policy.expand
+                        && policy.applies(
+                            matches!(actor.kind, protocol::ActorKind::Player { .. }),
+                            actor.position,
+                            ray_origin,
+                        )
+                })
+            {
+                return true;
+            }
+            match aim.target.map(|target| target.kind) {
                 Some(client_presentation::aim_assist::TargetKind::Actor(id)) => {
                     actor.runtime_id == id
                 }
                 Some(client_presentation::aim_assist::TargetKind::Block { .. }) => false,
                 None => true,
-            }),
-        |actor| authority.pick_hit_boxes(actor),
+            }
+        }),
+        |actor| {
+            super::hitbox::bounds(
+                actor,
+                authority.pick_hit_boxes(actor),
+                interaction.and_then(|interaction| interaction.hitbox),
+                ray_origin,
+            )
+        },
         ui.gameplay_hud().mount_unique_id(),
         ray_origin,
         ray.direction().to_array(),

@@ -1,7 +1,10 @@
 //! A translucent world-space cuboid with camera-facing solid edge strips.
 use crate::geometry::{KIND_GROUND, KIND_STRIP, ModVertex, STYLE_BILLBOARD};
 
-pub const VERTICES: usize = 36 + 12 * 6;
+pub const OUTLINE_VERTICES: usize = 12 * 6;
+pub const MAX_HITBOX_VERTICES: usize =
+    mod_api::MAX_OBSERVED_ACTORS * mod_api::MAX_OBSERVED_ACTOR_BOXES * OUTLINE_VERTICES;
+pub const VERTICES: usize = 36 + OUTLINE_VERTICES;
 const CORAL: [f32; 3] = [0.888, 0.195, 0.125];
 const EDGE_WIDTH: f32 = 0.012;
 // The primitive fragment shader owns the matching edge-coverage branch.
@@ -42,6 +45,19 @@ pub fn append(out: &mut Vec<ModVertex>, [min, max]: [[f32; 3]; 2]) {
             });
         }
     }
+    append_outline(out, [min, max]);
+}
+
+pub fn append_outline(out: &mut Vec<ModVertex>, [min, max]: [[f32; 3]; 2]) {
+    let points: [[f32; 3]; 8] = std::array::from_fn(|i| {
+        std::array::from_fn(|axis| {
+            if i & (1 << axis) == 0 {
+                min[axis]
+            } else {
+                max[axis]
+            }
+        })
+    });
     for a in 0..8 {
         for axis in 0..3 {
             if a & (1 << axis) != 0 {
@@ -67,5 +83,29 @@ pub fn append(out: &mut Vec<ModVertex>, [min, max]: [[f32; 3]; 2]) {
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn outlines_have_only_finite_edges_and_preserve_the_original_cuboid() {
+        let bounds = [[-0.3, 0.0, -0.3], [0.3, 1.8, 0.3]];
+        let mut outline = Vec::new();
+        append_outline(&mut outline, bounds);
+        assert_eq!(outline.len(), OUTLINE_VERTICES);
+        assert!(outline.iter().all(|vertex| vertex.anchor[3] == KIND_STRIP));
+        assert!(outline.iter().all(|vertex| {
+            vertex
+                .anchor
+                .iter()
+                .chain(vertex.shape.iter())
+                .all(|value| value.is_finite())
+        }));
+        let mut full = Vec::new();
+        append(&mut full, bounds);
+        assert_eq!(full.len(), VERTICES);
+        assert_eq!(&full[full.len() - outline.len()..], outline.as_slice());
     }
 }
