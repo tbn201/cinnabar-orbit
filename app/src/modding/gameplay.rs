@@ -38,6 +38,15 @@ pub(super) struct GameplayContext<'w> {
 
 impl GameplayContext<'_> {
     /// Read-only current world identity and feet pose, independent of input capture.
+    pub(super) fn ping_list_names(&self) -> Vec<std::sync::Arc<str>> {
+        self.world
+            .as_ref()
+            .and_then(|world| world.stream.as_ref())
+            .map_or_else(Vec::new, |stream| {
+                stream.authority().player_list_usernames()
+            })
+    }
+
     pub(super) fn world_observation(
         &self,
         ui: &client_ui::ui_runtime::UiRuntime,

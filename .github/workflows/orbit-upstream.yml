@@ -1,0 +1,45 @@
+name: OrBit upstream updates
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+concurrency:
+  group: orbit-upstream
+  cancel-in-progress: false
+jobs:
+  propose:
+    if: github.repository != 'bedrock-mc/cinnabar'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Open or refresh the upstream update proposal
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          upstream="$(jq -r .repository .github/orbit/upstream.json)"
+          base="$(jq -r .integration_branch .github/orbit/upstream.json)"
+          branch="$(gh api "repos/$upstream" --jq .default_branch)"
+          head="${upstream%/*}:$branch"
+          ahead="$(gh api "repos/$GH_REPO/compare/$base...$head" --jq .ahead_by)"
+          if [ "$ahead" -eq 0 ]; then
+            printf '%s\n' 'OrBit already includes the latest upstream commits.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          number="$(gh api --method GET "repos/$GH_REPO/pulls" -f base="$base" -f head="$head" --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            jq -n --arg base "$base" --arg head "$head" --arg repo "${upstream#*/}" \
+              '{base:$base,head:$head,head_repo:$repo,title:"Sync official Cinnabar updates",body:"Bring official Cinnabar updates into the OrBit branch. Review compatibility results and resolve conflicts before merging. Existing OrBit changes remain on the base branch."}' \
+              > "$RUNNER_TEMP/orbit-upstream-pr.json"
+            number="$(gh api --method POST "repos/$GH_REPO/pulls" --input "$RUNNER_TEMP/orbit-upstream-pr.json" --jq .number)"
+          fi
+          gh workflow run orbit-compatibility.yml --repo "$GH_REPO" --ref "$base" -f pull_request="$number"
+          printf 'Upstream update: https://github.com/%s/pull/%s\n' "$GH_REPO" "$number" >> "$GITHUB_STEP_SUMMARY"

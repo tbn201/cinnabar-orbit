@@ -25,6 +25,13 @@ use client_interaction::movement::{
 
 use gameplay::movement::LocomotionState as LocomotionLocals;
 
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct MovementNetwork<'w> {
+    network: Option<Res<'w, NetworkHandle<PackApplication>>>,
+    #[cfg(feature = "local-mods")]
+    assist: Option<Res<'w, crate::modding::assist::ModAssist>>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn advance_local_physics(
     time: Res<Time<Real>>,
@@ -42,7 +49,7 @@ pub(crate) fn advance_local_physics(
     player: Option<Res<PlayerRuntime>>,
     item_use: Option<Res<client_interaction::item_use::ItemUseRuntime>>,
     mut locals: Local<LocomotionLocals>,
-    network: Option<Res<NetworkHandle<PackApplication>>>,
+    network: MovementNetwork,
 ) {
     if acceptance.deadline_reached(Instant::now()) {
         movement_ticker.begin_terminal_drain();
@@ -79,6 +86,15 @@ pub(crate) fn advance_local_physics(
         .as_deref()
         .map(|settings| settings.user_settings_update().1.gameplay)
         .unwrap_or_default();
+    let toggle_sprint = gameplay.toggle_sprint;
+    #[cfg(feature = "local-mods")]
+    let toggle_sprint = toggle_sprint
+        || network.assist.as_deref().is_some_and(|assist| {
+            player.as_deref().is_some_and(|player| {
+                assist.sprint_for(player.facts.session_id(), stream.current_dimension())
+            })
+        });
+    let network = network.network;
     let frame = gameplay::movement::PhysicsFrameInput {
         delta: time.delta(),
         now: time.elapsed(),
@@ -96,7 +112,7 @@ pub(crate) fn advance_local_physics(
         jump: input.phase(Action::Jump),
         sprint: input.phase(Action::Sprint),
         sneak: input.phase(Action::Sneak),
-        toggle_sprint: gameplay.toggle_sprint,
+        toggle_sprint,
         always_sprint: gameplay.always_sprint && input_mode == PlayerInputMode::Mouse,
         toggle_sneak: gameplay.toggle_sneak,
         facts,

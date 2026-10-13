@@ -1,0 +1,46 @@
+name: OrBit upstream compatibility
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Upstream update pull request number
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: orbit-compatibility-${{ inputs.pull_request }}
+  cancel-in-progress: true
+jobs:
+  check:
+    if: github.repository != 'bedrock-mc/cinnabar'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Validate the update number
+        env:
+          PR_NUMBER: ${{ inputs.pull_request }}
+        run: |
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/pull/${{ inputs.pull_request }}/merge
+          persist-credentials: false
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+      - name: Check the integrated client and shared mod bridge
+        run: |
+          cargo check --locked --tests -p cinnabar --features local-mods
+          cargo check --locked --tests -p client-extensions --features local-mods
+          cargo test --locked -p client-extensions --features local-mods --lib modding::orbit

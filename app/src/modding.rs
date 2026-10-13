@@ -36,6 +36,8 @@ const DEMO_KEY: KeyCode = KeyCode::F8;
 const RELOAD_INTERVAL: Duration = Duration::from_millis(500);
 
 #[cfg(feature = "local-mods")]
+pub(crate) mod assist;
+#[cfg(feature = "local-mods")]
 mod hud_editor;
 #[cfg(feature = "local-mods")]
 mod registration;
@@ -259,6 +261,7 @@ fn install(app: &mut App, mut hosts: Vec<ModHost>) {
 
 #[cfg(feature = "local-mods")]
 fn configure_systems(app: &mut App, watching: bool) {
+    assist::configure(app);
     app.init_resource::<client_presentation::actor_publication::ActorPresentationStyle>();
     ghost::configure(app);
     block_highlights::configure(app);
@@ -305,6 +308,7 @@ type ModOutputs<'w> = (
     Option<ResMut<'w, client_presentation::camera::CameraSettingsAuthority>>,
     Option<ResMut<'w, ModCueFeed>>,
     Option<ResMut<'w, crate::item_use::ModItemUsePolicy>>,
+    Option<ResMut<'w, assist::ModAssist>>,
 );
 
 /// Native presentation facts and retained observers available to one mod frame.
@@ -337,7 +341,7 @@ fn drive_mod(
     driven: Option<Res<client_state::DrivenInput>>,
     windows: Query<(&Window, Option<&CursorOptions>), With<PrimaryWindow>>,
     mut ui: ResMut<UiRuntimeResource>,
-    menu: Option<Res<MenuRuntime>>,
+    mut menu: Option<ResMut<MenuRuntime>>,
     mut presentation: ResMut<UiPresentationResource>,
     time_override: Option<ResMut<VisualTimeOverride>>,
     mut gameplay: gameplay::GameplayContext,
@@ -355,6 +359,9 @@ fn drive_mod(
         mut module_observer,
         mut actor_style,
     } = observation;
+    if let Some(policy) = outputs.4.as_mut() {
+        **policy = assist::ModAssist::default();
+    }
     let focused = windows.single().is_ok_and(|(window, _)| window.focused);
     let absorbed = client_shell::screen_policy::absorbs_input(
         &player_runtime,
@@ -416,7 +423,7 @@ fn drive_mod(
     }
     let pressed = keybind_allowed(focused, absorbed) && keys.just_pressed(DEMO_KEY);
     let controls = std::mem::replace(&mut extension.controls, mod_host::empty_controls());
-    let (network, camera, cues, item_use) = outputs;
+    let (network, camera, cues, item_use, assist) = outputs;
     let previous_cues = cues.as_ref().map_or_else(Vec::new, |feed| feed.0.clone());
     let registration = extension.registration_request.clone();
     let registration_host = extension.registration_host;
@@ -513,8 +520,49 @@ fn drive_mod(
         gameplay.apply(delta);
     }
     send_commands(network.as_deref(), ui.session_id(), merged.commands);
+    if let Some(mut policy) = assist {
+        policy.scope = world_observation
+            .as_ref()
+            .filter(|world| world.alive)
+            .map(|world| (world.session, world.dimension));
+        policy.hotbar = merged.auto_hotbar;
+        policy.sprint = merged.toggle_sprint;
+        policy.debounce_ms = merged.debounce_ms;
+    }
+    if merged.open_closet && focused {
+        if let Some(menu) = menu.as_mut() {
+            menu.activate(launcher::menu::MenuAction::Navigate(
+                launcher::menu::MenuScreen::DressingRoom,
+            ));
+        }
+    }
     if let Some(mut cues) = cues {
         cues.0 = merged.cues;
+        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 1);
+        let bits = merged.assist_capabilities;
+        cues.0.push(mod_host::ModCue {
+            name: client_extensions::modding::orbit_protocol::READY.into(),
+            values: client_extensions::modding::orbit_protocol::ready_values(bits).to_vec(),
+        });
+        use client_extensions::modding::orbit_pings as pings;
+        let active = world_observation.is_some();
+        let names = if active {
+            gameplay.ping_list_names()
+        } else {
+            Vec::new()
+        };
+        cues.0.push(mod_host::ModCue {
+            name: pings::HEADER.into(),
+            values: vec![1.0, u8::from(active) as f32, names.len().min(65_535) as f32],
+        });
+        for (index, name) in names.iter().take(pings::MAX_ROWS).enumerate() {
+            for values in pings::encode_row(index, name, None) {
+                cues.0.push(mod_host::ModCue {
+                    name: pings::ROW.into(),
+                    values: values.to_vec(),
+                });
+            }
+        }
     }
     if let Some(mut camera) = camera {
         camera.set_rig(merged.rig.map(camera_rig));

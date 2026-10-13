@@ -379,7 +379,28 @@ pub fn run_frame(
         controls.gameplay = snapshot.is_some() || movement.is_some();
         claimed.extend(runtime.host(index).reserved_keys().iter().cloned());
         let host = runtime.host_mut(index);
-        host.deliver_cues(input.previous_cues.to_vec());
+        let available = assist_capabilities(host.grants());
+        let incoming = input
+            .previous_cues
+            .iter()
+            .filter(|cue| {
+                !matches!(
+                    cue.name.as_str(),
+                    super::orbit_pings::HEADER | super::orbit_pings::ROW
+                ) || host.grants().players
+            })
+            .cloned()
+            .map(|mut cue| {
+                if cue.name == super::orbit_protocol::READY {
+                    cue.values = super::orbit_protocol::ready_values(
+                        super::orbit_protocol::capabilities(&cue.values) & available,
+                    )
+                    .to_vec();
+                }
+                cue
+            })
+            .collect();
+        host.deliver_cues(incoming);
         let player_state = host
             .grants()
             .player_state
@@ -441,6 +462,11 @@ pub struct Merged {
     pub jump_cancel: bool,
     pub commands: Vec<String>,
     pub cues: Vec<ModCue>,
+    pub assist_capabilities: u8,
+    pub auto_hotbar: Option<(bool, bool)>,
+    pub toggle_sprint: bool,
+    pub debounce_ms: Option<f32>,
+    pub open_closet: bool,
 }
 
 impl Merged {
@@ -459,8 +485,51 @@ impl Merged {
         self.item_use_delay_fix = self.item_use_delay_fix.or(host.item_use_delay_fix());
         self.time_override = self.time_override.or(host.time_override());
         self.commands.extend(host.take_commands());
-        self.cues.extend(host.take_cues());
+        use super::orbit_protocol::{self as protocol, Policy};
+        let available = if host.is_active() {
+            assist_capabilities(host.grants())
+        } else {
+            0
+        };
+        let controls = available & protocol::CLOSET != 0;
+        let hotbar = available & protocol::HOTBAR != 0;
+        let sprint = available & protocol::SPRINT != 0;
+        self.assist_capabilities |= available;
+        for cue in host.take_cues() {
+            match cue.name.as_str() {
+                protocol::POLICY => {
+                    if let Some(policy) = Policy::parse(&cue.values) {
+                        if hotbar && (policy.auto_stack || policy.auto_tool) {
+                            self.auto_hotbar
+                                .get_or_insert((policy.auto_stack, policy.auto_tool));
+                        }
+                        self.toggle_sprint |= sprint && policy.toggle_sprint;
+                    }
+                }
+                protocol::DC_PREVENT => {
+                    if available & protocol::DEBOUNCE != 0 {
+                        if let Some(delay) = protocol::debounce_delay(&cue.values) {
+                            self.debounce_ms.get_or_insert(delay);
+                        }
+                    }
+                }
+                protocol::COSMETICS => self.open_closet |= controls && cue.values == [1.0],
+                protocol::READY | super::orbit_pings::HEADER | super::orbit_pings::ROW => {}
+                _ => self.cues.push(cue),
+            }
+        }
     }
+}
+
+fn assist_capabilities(grants: &ModGrants) -> u8 {
+    use super::orbit_protocol::{CLOSET, DEBOUNCE, HOTBAR, SPRINT};
+    if !grants.controls {
+        return 0;
+    }
+    CLOSET
+        | DEBOUNCE
+        | (u8::from(grants.player_state && grants.item_use) * HOTBAR)
+        | (u8::from(grants.movement) * SPRINT)
 }
 
 /// Of mods in load order, each `(may draw, draws)`: the earliest that draws an overlay or view,
@@ -493,3 +562,28 @@ fn join_labels(labels: &[String]) -> Option<String> {
 #[cfg(test)]
 #[path = "multi_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod assist_tests {
+    use super::super::orbit_protocol::{CLOSET, DEBOUNCE, HOTBAR, SPRINT};
+    use super::*;
+
+    #[test]
+    fn readiness_is_scoped_to_the_receiving_components_grants() {
+        let mut grants = ModGrants::default();
+        assert_eq!(assist_capabilities(&grants), 0);
+        grants.controls = true;
+        assert_eq!(assist_capabilities(&grants), CLOSET | DEBOUNCE);
+        grants.player_state = true;
+        assert_eq!(assist_capabilities(&grants), CLOSET | DEBOUNCE);
+        grants.item_use = true;
+        assert_eq!(assist_capabilities(&grants), CLOSET | DEBOUNCE | HOTBAR);
+        grants.movement = true;
+        assert_eq!(
+            assist_capabilities(&grants),
+            CLOSET | DEBOUNCE | HOTBAR | SPRINT
+        );
+        grants.controls = false;
+        assert_eq!(assist_capabilities(&grants), 0);
+    }
+}

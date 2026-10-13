@@ -127,7 +127,7 @@ impl BlockDestroyInfo {
         self.effective & kind.bit() != 0
     }
 
-    fn harvestable_with(&self, tool: Option<HeldTool>) -> bool {
+    pub fn harvestable_with(&self, tool: Option<HeldTool>) -> bool {
         match self.harvest {
             HarvestRequirement::Hand => true,
             HarvestRequirement::Unresolved => false,
