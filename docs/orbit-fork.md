@@ -10,4 +10,6 @@ Review the compatibility run and the upstream CI results, resolve any merge conf
 
 The inherited Package workflow builds the custom branch for macOS and Windows using Cinnabar's original packaging tools. Run it manually with the `orbit` branch selected after validation. It includes `local-mods`. An OrBit Launcher `.exe` or `.dmg` and a customized Cinnabar build are separate artifacts; building the launcher does not build or install the host.
 
-The integration adds grant-checked events for hotbar selection, sprint latching, click debounce, Dressing Room navigation and a bounded player-name roster. Player latency remains unavailable until a real host measurement is supplied. There are no new unrestricted tick-speed, attack-input or reach capabilities in this setup.
+The integration adds grant-checked events for hotbar selection, sprint latching, automatic forward sprinting, click debounce, Dressing Room navigation and a bounded player-name roster. Player latency remains unavailable until a real host measurement is supplied. There are no new unrestricted tick-speed, attack-input or reach capabilities in this setup.
+
+Auto Sprint uses the versioned `orbit.auto-sprint` request and separate `orbit.auto-sprint-ready` capability. It requires controls and movement grants, is renewed each frame, and is limited to focused, captured gameplay in the current player session and dimension. The host uses its existing always-sprint movement path, so movement eligibility and server authority remain unchanged. Older hosts retain Toggle Sprint and Auto Hotbar support.

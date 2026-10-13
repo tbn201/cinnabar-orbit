@@ -397,6 +397,15 @@ pub fn run_frame(
                     )
                     .to_vec();
                 }
+                if cue.name == super::orbit_protocol::AUTO_SPRINT_READY {
+                    cue.values = vec![
+                        1.0,
+                        f32::from(u8::from(
+                            available & super::orbit_protocol::AUTO_SPRINT_CAPABILITY != 0
+                                && super::orbit_protocol::auto_sprint_requested(&cue.values),
+                        )),
+                    ];
+                }
                 cue
             })
             .collect();
@@ -465,6 +474,7 @@ pub struct Merged {
     pub assist_capabilities: u8,
     pub auto_hotbar: Option<(bool, bool)>,
     pub toggle_sprint: bool,
+    pub auto_sprint: bool,
     pub debounce_ms: Option<f32>,
     pub open_closet: bool,
 }
@@ -506,6 +516,10 @@ impl Merged {
                         self.toggle_sprint |= sprint && policy.toggle_sprint;
                     }
                 }
+                protocol::AUTO_SPRINT => {
+                    self.auto_sprint |= available & protocol::AUTO_SPRINT_CAPABILITY != 0
+                        && protocol::auto_sprint_requested(&cue.values);
+                }
                 protocol::DC_PREVENT => {
                     if available & protocol::DEBOUNCE != 0 {
                         if let Some(delay) = protocol::debounce_delay(&cue.values) {
@@ -514,7 +528,10 @@ impl Merged {
                     }
                 }
                 protocol::COSMETICS => self.open_closet |= controls && cue.values == [1.0],
-                protocol::READY | super::orbit_pings::HEADER | super::orbit_pings::ROW => {}
+                protocol::READY
+                | protocol::AUTO_SPRINT_READY
+                | super::orbit_pings::HEADER
+                | super::orbit_pings::ROW => {}
                 _ => self.cues.push(cue),
             }
         }
@@ -522,14 +539,14 @@ impl Merged {
 }
 
 fn assist_capabilities(grants: &ModGrants) -> u8 {
-    use super::orbit_protocol::{CLOSET, DEBOUNCE, HOTBAR, SPRINT};
+    use super::orbit_protocol::{AUTO_SPRINT_CAPABILITY, CLOSET, DEBOUNCE, HOTBAR, SPRINT};
     if !grants.controls {
         return 0;
     }
     CLOSET
         | DEBOUNCE
         | (u8::from(grants.player_state && grants.item_use) * HOTBAR)
-        | (u8::from(grants.movement) * SPRINT)
+        | (u8::from(grants.movement) * (SPRINT | AUTO_SPRINT_CAPABILITY))
 }
 
 /// Of mods in load order, each `(may draw, draws)`: the earliest that draws an overlay or view,
@@ -565,7 +582,7 @@ mod tests;
 
 #[cfg(test)]
 mod assist_tests {
-    use super::super::orbit_protocol::{CLOSET, DEBOUNCE, HOTBAR, SPRINT};
+    use super::super::orbit_protocol::{AUTO_SPRINT_CAPABILITY, CLOSET, DEBOUNCE, HOTBAR, SPRINT};
     use super::*;
 
     #[test]
@@ -581,7 +598,7 @@ mod assist_tests {
         grants.movement = true;
         assert_eq!(
             assist_capabilities(&grants),
-            CLOSET | DEBOUNCE | HOTBAR | SPRINT
+            CLOSET | DEBOUNCE | HOTBAR | SPRINT | AUTO_SPRINT_CAPABILITY
         );
         grants.controls = false;
         assert_eq!(assist_capabilities(&grants), 0);

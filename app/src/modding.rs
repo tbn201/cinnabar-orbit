@@ -527,6 +527,8 @@ fn drive_mod(
             .map(|world| (world.session, world.dimension));
         policy.hotbar = merged.auto_hotbar;
         policy.sprint = merged.toggle_sprint;
+        policy.auto_sprint =
+            merged.auto_sprint && movement_allowed && focused && captured && !absorbed;
         policy.debounce_ms = merged.debounce_ms;
     }
     if merged.open_closet && focused {
@@ -538,11 +540,20 @@ fn drive_mod(
     }
     if let Some(mut cues) = cues {
         cues.0 = merged.cues;
-        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 1);
+        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 2);
         let bits = merged.assist_capabilities;
         cues.0.push(mod_host::ModCue {
             name: client_extensions::modding::orbit_protocol::READY.into(),
             values: client_extensions::modding::orbit_protocol::ready_values(bits).to_vec(),
+        });
+        cues.0.push(mod_host::ModCue {
+            name: client_extensions::modding::orbit_protocol::AUTO_SPRINT_READY.into(),
+            values: vec![
+                1.0,
+                f32::from(u8::from(
+                    bits & client_extensions::modding::orbit_protocol::AUTO_SPRINT_CAPABILITY != 0,
+                )),
+            ],
         });
         use client_extensions::modding::orbit_pings as pings;
         let active = world_observation.is_some();

@@ -21,11 +21,16 @@ use selection::{Frame, Item, ItemKey, Selection, Slot, ToolScore};
 pub(crate) struct ModAssist {
     pub hotbar: Option<(bool, bool)>,
     pub sprint: bool,
+    pub auto_sprint: bool,
     pub debounce_ms: Option<f32>,
     pub scope: Option<(u64, i32)>,
 }
 
 impl ModAssist {
+    pub fn auto_sprint_for(&self, session: u64, dimension: i32) -> bool {
+        self.auto_sprint && self.scope == Some((session, dimension))
+    }
+
     pub fn sprint_for(&self, session: u64, dimension: i32) -> bool {
         self.sprint && self.scope == Some((session, dimension))
     }
@@ -307,5 +312,27 @@ fn filter_double_clicks(
         if buttons.just_pressed(button) && state.1.reject(index, time.elapsed_secs_f64(), delay) {
             runtime.consume_control(semantic_input::PhysicalControl::MouseButton(code));
         }
+    }
+}
+
+#[cfg(test)]
+mod sprint_scope_tests {
+    use super::*;
+
+    #[test]
+    fn auto_sprint_cannot_cross_player_sessions_or_dimensions() {
+        let mut policy = ModAssist {
+            auto_sprint: true,
+            scope: Some((7, 0)),
+            ..ModAssist::default()
+        };
+        assert!(policy.auto_sprint_for(7, 0));
+        assert!(!policy.auto_sprint_for(8, 0));
+        assert!(!policy.auto_sprint_for(7, 1));
+        policy.scope = None;
+        assert!(!policy.auto_sprint_for(7, 0));
+        policy.scope = Some((7, 0));
+        policy.auto_sprint = false;
+        assert!(!policy.auto_sprint_for(7, 0));
     }
 }

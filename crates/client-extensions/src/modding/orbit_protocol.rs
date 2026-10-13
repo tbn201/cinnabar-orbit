@@ -1,3 +1,11 @@
+pub const AUTO_SPRINT: &str = "orbit.auto-sprint";
+pub const AUTO_SPRINT_READY: &str = "orbit.auto-sprint-ready";
+pub const AUTO_SPRINT_CAPABILITY: u8 = 32;
+
+pub fn auto_sprint_requested(values: &[f32]) -> bool {
+    values == [1.0, 1.0]
+}
+
 pub const POLICY: &str = "orbit.assist-policy";
 pub const READY: &str = "orbit.assist-ready";
 pub const COSMETICS: &str = "orbit.closet-open";
@@ -174,5 +182,30 @@ mod event_name_tests {
                 || byte.is_ascii_digit()
                 || b"._-".contains(&byte)));
         }
+    }
+}
+
+#[cfg(test)]
+mod auto_sprint_tests {
+    use super::*;
+
+    #[test]
+    fn auto_sprint_accepts_only_the_enabled_versioned_request() {
+        assert!(auto_sprint_requested(&[1.0, 1.0]));
+        for values in [
+            vec![],
+            vec![1.0],
+            vec![1.0, 0.0],
+            vec![2.0, 1.0],
+            vec![1.0, 0.5],
+            vec![1.0, f32::NAN],
+            vec![1.0, 1.0, 1.0],
+        ] {
+            assert!(!auto_sprint_requested(&values));
+        }
+        assert_eq!(
+            AUTO_SPRINT_CAPABILITY & (HOTBAR | SPRINT | CLOSET | DEBOUNCE | 16),
+            0
+        );
     }
 }

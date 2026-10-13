@@ -94,6 +94,14 @@ pub(crate) fn advance_local_physics(
                 assist.sprint_for(player.facts.session_id(), stream.current_dimension())
             })
         });
+    let always_sprint = gameplay.always_sprint && input_mode == PlayerInputMode::Mouse;
+    #[cfg(feature = "local-mods")]
+    let always_sprint = always_sprint
+        || network.assist.as_deref().is_some_and(|assist| {
+            player.as_deref().is_some_and(|player| {
+                assist.auto_sprint_for(player.facts.session_id(), stream.current_dimension())
+            })
+        });
     let network = network.network;
     let frame = gameplay::movement::PhysicsFrameInput {
         delta: time.delta(),
@@ -113,7 +121,7 @@ pub(crate) fn advance_local_physics(
         sprint: input.phase(Action::Sprint),
         sneak: input.phase(Action::Sneak),
         toggle_sprint,
-        always_sprint: gameplay.always_sprint && input_mode == PlayerInputMode::Mouse,
+        always_sprint,
         toggle_sneak: gameplay.toggle_sneak,
         facts,
         item_use_modifier: item_use

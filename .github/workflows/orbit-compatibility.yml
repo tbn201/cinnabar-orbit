@@ -44,3 +44,5 @@ jobs:
           cargo check --locked --tests -p cinnabar --features local-mods
           cargo check --locked --tests -p client-extensions --features local-mods
           cargo test --locked -p client-extensions --features local-mods --lib modding::orbit
+          cargo test --locked -p client-extensions --features local-mods --lib modding::multi::assist_tests
+          cargo test --locked -p gameplay --lib always_sprint_keeps_request_flags_while_actor_sprint_is_gated
