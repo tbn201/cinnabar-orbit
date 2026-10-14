@@ -77,6 +77,7 @@ fn select_hotbar(
     scroll: Res<AccumulatedMouseScroll>,
     policy: Res<ModAssist>,
     mut state: Local<Selection>,
+    interaction: Option<Res<super::interaction::ModInteraction>>,
 ) {
     let Some(stream) = world.stream.as_ref() else {
         state.reset();
@@ -110,7 +111,8 @@ fn select_hotbar(
         state.reset();
         return;
     }
-    let attack = input.phase(Action::Attack);
+    let mut attack = input.phase(Action::Attack);
+    attack.held |= interaction.as_deref().is_some_and(|policy| policy.mining.is_some());
     let using = input.phase(Action::Use);
     let manual = HOTBAR_DIGIT_ACTIONS
         .iter()

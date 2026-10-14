@@ -391,6 +391,9 @@ pub fn run_frame(
             })
             .cloned()
             .map(|mut cue| {
+                if cue.name == super::orbit_autominer::READY {
+                    cue.values = vec![1.0, u8::from(available & super::orbit_autominer::CAPABILITY != 0) as f32];
+                }
                 if cue.name == super::orbit_autoclicker::READY {
                     cue.values = vec![1.0, u8::from(available & super::orbit_autoclicker::CAPABILITY != 0) as f32];
                 }
@@ -484,6 +487,7 @@ pub struct Merged {
     pub auto_hotbar: Option<(bool, bool)>,
     pub toggle_sprint: bool,
     pub auto_sprint: bool,
+    pub autominer: Option<super::orbit_autominer::Policy>,
     pub autoclicker: Option<super::orbit_autoclicker::Policy>,
     pub debounce_ms: Option<f32>,
     pub open_closet: bool,
@@ -527,6 +531,14 @@ impl Merged {
                         self.toggle_sprint |= sprint && policy.toggle_sprint;
                     }
                 }
+                super::orbit_autominer::REQUEST => {
+                    if available & super::orbit_autominer::CAPABILITY != 0 {
+                        if let Some(policy) = super::orbit_autominer::Policy::parse(&cue.values) {
+                            self.autominer.get_or_insert(policy);
+                        }
+                    }
+                }
+                super::orbit_autominer::READY => {}
                 super::orbit_autoclicker::REQUEST => {
                     if available & super::orbit_autoclicker::CAPABILITY != 0 {
                         if let Some(policy) = super::orbit_autoclicker::Policy::parse(&cue.values) {
@@ -572,6 +584,7 @@ fn assist_capabilities(grants: &ModGrants) -> u8 {
         return 0;
     }
     CLOSET
+        | (u8::from(grants.interaction && grants.camera && grants.player_state && grants.item_use) * super::orbit_autominer::CAPABILITY)
         | (u8::from(grants.interaction) * super::orbit_autoclicker::CAPABILITY)
         | DEBOUNCE
         | (u8::from(grants.player_state && grants.item_use) * HOTBAR)
@@ -638,6 +651,19 @@ mod assist_tests {
         );
         grants.controls = false;
         assert_eq!(assist_capabilities(&grants), 0);
+    }
+    #[test]
+    fn autominer_requires_controls_camera_interaction_and_item_authority() {
+        let granted = ModGrants { controls: true, camera: true, interaction: true,
+            player_state: true, item_use: true, ..ModGrants::default() };
+        let bit = super::super::orbit_autominer::CAPABILITY;
+        assert_ne!(assist_capabilities(&granted) & bit, 0);
+        for field in 0..5 {
+            let mut missing = granted.clone();
+            match field { 0 => missing.controls = false, 1 => missing.camera = false,
+                2 => missing.interaction = false, 3 => missing.player_state = false, _ => missing.item_use = false }
+            assert_eq!(assist_capabilities(&missing) & bit, 0);
+        }
     }
     #[test]
     fn autoclicker_requires_both_controls_and_interaction_authority() {

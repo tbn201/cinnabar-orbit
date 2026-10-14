@@ -20,7 +20,7 @@ pub(super) struct GameplayContext<'w> {
     auto_fly: Option<Res<'w, AutoFly>>,
     server_camera: Option<Res<'w, ServerCameraView>>,
     time: Option<Res<'w, Time>>,
-    real_time: Option<Res<'w, Time<Real>>>,
+    pub(super) real_time: Option<Res<'w, Time<Real>>>,
     clock: Option<Res<'w, crate::environment::WorldClock>>,
     pub(super) physics: Option<ResMut<'w, client_interaction::movement::LocalPhysicsController>>,
     pub(super) movement: Option<Res<'w, client_interaction::movement::MovementTicker>>,

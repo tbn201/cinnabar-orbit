@@ -60,6 +60,8 @@ pub(crate) struct SurvivalMiningContext<'w, 's> {
     melee: Res<'w, MeleeRuntime>,
     network: Res<'w, NetworkHandle<PackApplication>>,
     time: Res<'w, Time<Real>>,
+    #[cfg(feature = "local-mods")]
+    interaction: Option<Res<'w, crate::modding::interaction::ModInteraction>>,
     block_cues: bevy::prelude::MessageWriter<'w, client_audio::audio::LocalBlockCue>,
 }
 
@@ -94,10 +96,14 @@ pub(crate) fn produce_survival_mining(
     let snapshot_present = snapshot.is_some();
     let actor_in_front = context.melee.actor_in_front();
     let active = mining_active(caps, focused, snapshot_present);
+    #[cfg(feature = "local-mods")]
+    let automatic = context.interaction.as_deref().and_then(|policy| policy.mining);
+    #[cfg(not(feature = "local-mods"))]
+    let automatic: Option<([i32; 3], u32)> = None;
     let target = match snapshot.filter(|_| active) {
         Some(input) => {
             runtime.latched_press |= attack.pressed;
-            (attack.held || runtime.latched_press).then(|| {
+            (attack.held || runtime.latched_press || automatic.is_some()).then(|| {
                 // An actor in front owns the press; the block behind it is not a target.
                 (!actor_in_front)
                     .then(|| {
@@ -111,6 +117,13 @@ pub(crate) fn produce_survival_mining(
                         )
                     })
                     .flatten()
+                    .filter(|target| {
+                        attack.held || runtime.latched_press
+                            || (automatic == Some((target.position, target.runtime_id))
+                                && (target.instant || target.block.as_ref().is_some_and(|block| {
+                                    block.harvestable_with(target.conditions.tool)
+                                })))
+                    })
             })
         }
         None => {
