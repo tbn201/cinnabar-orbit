@@ -314,13 +314,15 @@ impl LocalPhysicsController {
                 output.controls.move_vector[1] as f32,
             ];
             retained.horizontal_collision = result.collisions.x || result.collisions.z;
-            retained.vertical_collision = result.collisions.y;
             retained.grounded_after_tick = result.on_ground;
             // The replay fed this input verbatim, mirroring the simulator's
             // own per-tick consumption.
             let Some(frame_input) = self.history.input_at(result.tick) else {
                 return Err(PhysicsCorrectionError::NotRetained { tick: result.tick });
             };
+            retained.vertical_collision = frame_input
+                .assist
+                .reports_vertical_collision(result.collisions.y, result.velocity.y);
             if frame_input.immobile || frame_input.mode == sim::MovementMode::Riding {
                 jump_fold = ReplayJumpArcFold::seed(true, false, false);
             }

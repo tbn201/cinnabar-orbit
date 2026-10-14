@@ -479,3 +479,52 @@ fn explicit_armor_slot_precedes_offhand_and_caps_equipment_to_one() {
     assert_eq!(ledger.displayed_stack(20).unwrap().count, 1);
     assert!(ledger.target_stack(InventoryTarget::Offhand).is_none());
 }
+
+fn closed_ledger(source: u8, offhand: NetworkItemStack) -> PlayerInventoryLedger {
+    let mut ledger = ledger(source, offhand);
+    ledger.request_personal_close();
+    ledger.apply(&InventoryEvent::Close(protocol::ContainerCloseEvent {
+        container: ContainerIdentity::window(2),
+        window_type: PERSONAL_INVENTORY_WINDOW_TYPE,
+        server_initiated: true,
+    }));
+    ledger
+}
+
+#[test]
+fn world_offhand_equip_places_a_totem_without_an_open_window() {
+    let mut ledger = closed_ledger(20, NetworkItemStack::default());
+    assert_eq!(ledger.storage_generation(), None);
+    ledger.begin_world_offhand_equip(20).unwrap();
+    assert!(matches!(
+        ledger.newest_action(),
+        Some(StackRequestAction::Place { amount: 1, source, destination })
+            if source.container == StackRequestContainer::PlayerInventory
+                && source.slot == 20 && source.stack_network_id == 100
+                && destination.container == StackRequestContainer::Offhand
+                && destination.slot == 1
+    ));
+    assert!(ledger.displayed_stack(20).is_none());
+    assert!(
+        ledger
+            .target_stack(InventoryTarget::Offhand)
+            .is_some_and(|stack| stack.network_id == 6 && stack.count == 1)
+    );
+    assert_eq!(count(&ledger), 1);
+}
+
+#[test]
+fn world_offhand_equip_swaps_an_occupied_offhand_and_refuses_empty_sources() {
+    let mut ledger = closed_ledger(20, totem(101));
+    ledger.begin_world_offhand_equip(20).unwrap();
+    assert!(matches!(
+        ledger.newest_action(),
+        Some(StackRequestAction::Swap { source, destination })
+            if source.slot == 20 && destination.container == StackRequestContainer::Offhand
+    ));
+    assert_eq!(count(&ledger), 2);
+    assert_eq!(
+        ledger.begin_world_offhand_equip(3),
+        Err(InventoryGestureError::EmptyGesture)
+    );
+}

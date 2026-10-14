@@ -58,6 +58,28 @@ fn rig_forces_third_person_back_and_clearing_restores_the_player_choice() {
 }
 
 #[test]
+fn first_person_rig_keeps_the_player_perspective_and_offsets_from_the_eye() {
+    let mut settings = CameraSettingsAuthority::default();
+    settings.reset_perspective();
+    let sway = CameraRig {
+        offset: Vec3::new(0.05, -0.02, 0.0),
+        roll_radians: 0.1,
+        fov_delta_degrees: 4.0,
+    };
+    settings.set_rig(Some(sway));
+    settings.set_rig_keeps_perspective(true);
+    assert_eq!(settings.perspective(), PerspectiveMode::FirstPerson);
+    assert_eq!(settings.rig(), Some(sway));
+    settings.cycle_perspective();
+    assert_eq!(settings.perspective(), PerspectiveMode::ThirdPersonBack);
+    settings.reset_perspective();
+    assert!(!settings.rig_keeps_perspective());
+    assert_eq!(settings.perspective(), PerspectiveMode::ThirdPersonBack);
+    settings.set_rig(None);
+    assert_eq!(settings.perspective(), PerspectiveMode::FirstPerson);
+}
+
+#[test]
 fn view_multipliers_leave_saved_settings_and_perspective_intact() {
     let mut settings = CameraSettingsAuthority::default();
     let mut user = ui::UserSettings::default();

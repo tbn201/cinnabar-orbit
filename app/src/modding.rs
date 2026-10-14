@@ -262,6 +262,7 @@ fn install(app: &mut App, mut hosts: Vec<ModHost>) {
 #[cfg(feature = "local-mods")]
 fn configure_systems(app: &mut App, watching: bool) {
     assist::configure(app);
+    auto_totem::configure(app);
     app.init_resource::<client_presentation::actor_publication::ActorPresentationStyle>();
     ghost::configure(app);
     block_highlights::configure(app);
@@ -326,6 +327,8 @@ struct ModObservation<'w, 's> {
     frame_rate: Local<'s, presentation_facts::FrameRate>,
     aim: Local<'s, aim_assist::Aim>,
     miner: Local<'s, autominer::Miner>,
+    freecam: Local<'s, motion::Freecam>,
+    bases: Local<'s, base_finder::BaseFinder>,
     module_observer: Local<'s, module_observations::ModuleObserver>,
     actor_style: Option<ResMut<'w, client_presentation::actor_publication::ActorPresentationStyle>>,
 }
@@ -360,6 +363,8 @@ fn drive_mod(
         mut frame_rate,
         mut aim,
         mut miner,
+        mut freecam,
+        mut bases,
         mut module_observer,
         mut actor_style,
     } = observation;
@@ -554,6 +559,41 @@ fn drive_mod(
         gameplay.apply(delta);
     }
     send_commands(network.as_deref(), ui.session_id(), merged.commands);
+    let alive = world_observation.as_ref().is_some_and(|world| world.alive);
+    let motion = if movement_allowed && alive {
+        motion::MotionPolicy {
+            freecam: merged.freecam.map(|policy| policy.speed),
+            fly: merged.fly.map(|policy| policy.speed),
+            no_fall: merged.no_fall,
+            spider: merged.spider,
+            step: merged.step.map(|policy| policy.height),
+        }
+    } else {
+        motion::MotionPolicy::default()
+    };
+    let steering = gameplay
+        .input
+        .as_deref()
+        .map_or_else(Default::default, motion::Steering::read);
+    let free_eye = freecam.update(
+        motion.freecam,
+        gameplay.view.as_deref(),
+        steering,
+        time.delta_secs(),
+    );
+    let found_bases = bases.update(
+        gameplay
+            .world
+            .as_deref()
+            .and_then(|world| world.stream.as_ref()),
+        world_observation.as_ref().map_or([f32::NAN; 3], |world| {
+            [world.position.0, world.position.1, world.position.2]
+        }),
+        merged
+            .base_finder
+            .filter(|_| world_observation.is_some()),
+        time.elapsed_secs_f64(),
+    );
     if let Some(mut policy) = assist {
         policy.scope = world_observation
             .as_ref()
@@ -564,6 +604,11 @@ fn drive_mod(
         policy.auto_sprint =
             merged.auto_sprint && movement_allowed && focused && captured && !absorbed;
         policy.debounce_ms = merged.debounce_ms;
+        policy.motion = motion;
+        policy.auto_totem = merged
+            .auto_totem
+            .filter(|_| alive)
+            .map(|policy| policy.health);
     }
     if merged.open_closet && focused {
         if let Some(menu) = menu.as_mut() {
@@ -605,6 +650,21 @@ fn drive_mod(
                 )),
             ],
         });
+        let extended = merged.extended_capabilities;
+        for (name, _) in multi::EXTENDED_READY {
+            if let Some(values) = multi::extended_ready_values(name, extended) {
+                cues.0.push(mod_host::ModCue {
+                    name: name.into(),
+                    values,
+                });
+            }
+        }
+        for base in &found_bases {
+            cues.0.push(mod_host::ModCue {
+                name: client_extensions::modding::orbit_base_finder::BASE.into(),
+                values: base.values().to_vec(),
+            });
+        }
         use client_extensions::modding::orbit_pings as pings;
         let active = world_observation.is_some();
         let names = if active {
@@ -630,6 +690,8 @@ fn drive_mod(
         camera.set_preserve_teleport_rotation(merged.preserve_teleport_rotation);
         let [fov_scale, look_scale] = merged.view_scale.unwrap_or([1.0, 1.0]);
         camera.set_view_scale(fov_scale, look_scale);
+        camera.set_free_camera(free_eye);
+        camera.set_rig_keeps_perspective(merged.first_person_rig && merged.rig.is_some());
     }
     if let Some(mut policy) = item_use {
         policy.scope = merged.item_use_delay_fix;
@@ -837,7 +899,11 @@ mod time_changer_tests;
 #[cfg(feature = "local-mods")]
 mod aim_assist;
 #[cfg(feature = "local-mods")]
+mod auto_totem;
+#[cfg(feature = "local-mods")]
 mod autominer;
+#[cfg(feature = "local-mods")]
+mod base_finder;
 #[cfg(feature = "local-mods")]
 pub(crate) mod block_highlights;
 #[cfg(feature = "local-mods")]
@@ -854,6 +920,8 @@ mod input;
 pub(crate) mod interaction;
 #[cfg(feature = "local-mods")]
 mod module_observations;
+#[cfg(feature = "local-mods")]
+pub(crate) mod motion;
 #[cfg(feature = "local-mods")]
 pub(crate) mod packet_delay;
 #[cfg(feature = "local-mods")]

@@ -337,6 +337,7 @@ impl ModuleObserver {
                         state.velocity.z as f32,
                     ),
                     on_ground: state.on_ground,
+                    tick: state.tick,
                 }
             });
         let hunger = ui.hud().hunger();

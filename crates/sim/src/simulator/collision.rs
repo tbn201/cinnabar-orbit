@@ -20,6 +20,7 @@ pub(super) fn resolve_motion(
     start: Aabb,
     velocity: Vec3,
     was_on_ground: bool,
+    step_height: f64,
 ) -> Result<ResolvedMotion, WorldQueryError> {
     let colliders = bounded_collision_boxes(world, start.swept(velocity))?;
     let mut identity = colliders.identity;
@@ -32,10 +33,10 @@ pub(super) fn resolve_motion(
         // As vanilla's step-up collision volume does, cover the raised path too.
         let envelope = bounded_collision_boxes(
             world,
-            start.swept(Vec3::new(velocity.x, STEP_HEIGHT, velocity.z)),
+            start.swept(Vec3::new(velocity.x, step_height, velocity.z)),
         )?;
         identity = identity.merge(&envelope.identity)?;
-        let (step_box, step) = resolve_step(start, velocity, &envelope.value);
+        let (step_box, step) = resolve_step(start, velocity, &envelope.value, step_height);
         let step_query = bounded_collision_boxes(world, step_box)?;
         identity = identity.merge(&step_query.identity)?;
         let step_blocked = !step_query.value.is_empty();
@@ -215,9 +216,14 @@ fn clamp_toward_zero(value: f64, limit: f64) -> f64 {
     }
 }
 
-fn resolve_step(start: Aabb, velocity: Vec3, colliders: &[ProvenancedCollider]) -> (Aabb, Vec3) {
+fn resolve_step(
+    start: Aabb,
+    velocity: Vec3,
+    colliders: &[ProvenancedCollider],
+    step_height: f64,
+) -> (Aabb, Vec3) {
     let mut current = start;
-    let mut up = Vec3::new(0.0, STEP_HEIGHT, 0.0);
+    let mut up = Vec3::new(0.0, step_height, 0.0);
     for collider in colliders.iter().copied() {
         up = current.clip_against(collider.aabb, up);
     }

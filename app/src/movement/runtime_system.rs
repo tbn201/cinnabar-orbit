@@ -73,6 +73,37 @@ pub(crate) fn advance_local_physics(
     let movement = input.movement();
     let raw_movement = input.raw_movement();
     let analogue_movement = input.analogue_movement();
+    let movement_buttons =
+        semantic.map_or_else(Default::default, |snapshot| snapshot.movement_buttons);
+    let (jump, sprint, sneak) = (
+        input.phase(Action::Jump),
+        input.phase(Action::Sprint),
+        input.phase(Action::Sneak),
+    );
+    #[cfg(feature = "local-mods")]
+    let motion = network.assist.as_deref().map_or_else(Default::default, |assist| {
+        player.as_deref().map_or_else(Default::default, |player| {
+            assist.motion_for(player.facts.session_id(), stream.current_dimension())
+        })
+    });
+    #[cfg(feature = "local-mods")]
+    let assist = motion.assist(
+        view.rotation(),
+        crate::modding::motion::Steering::read(&input),
+    );
+    #[cfg(feature = "local-mods")]
+    let (movement, raw_movement, analogue_movement, movement_buttons) = if motion.freecam.is_some()
+    {
+        ([0.0; 2], [0.0; 2], [0.0; 2], Default::default())
+    } else {
+        (movement, raw_movement, analogue_movement, movement_buttons)
+    };
+    #[cfg(feature = "local-mods")]
+    let (jump, sprint, sneak) = if motion.freecam.is_some() || assist.fly_velocity.is_some() {
+        Default::default()
+    } else {
+        (jump, sprint, sneak)
+    };
     let (bevy_yaw, bevy_pitch, _) = view.rotation().to_euler(EulerRot::YXZ);
     let yaw = gameplay::movement::wire_yaw(180.0 - bevy_yaw.to_degrees());
     let facts = gameplay::movement::local_facts::read(
@@ -111,15 +142,14 @@ pub(crate) fn advance_local_physics(
         movement,
         raw_movement,
         analogue_movement,
-        movement_buttons: semantic
-            .map_or_else(Default::default, |snapshot| snapshot.movement_buttons),
+        movement_buttons,
         yaw,
         pitch: -bevy_pitch.to_degrees(),
         camera_orientation: (view.rotation() * Vec3::NEG_Z).to_array(),
         input_mode,
-        jump: input.phase(Action::Jump),
-        sprint: input.phase(Action::Sprint),
-        sneak: input.phase(Action::Sneak),
+        jump,
+        sprint,
+        sneak,
         toggle_sprint,
         always_sprint,
         toggle_sneak: gameplay.toggle_sneak,
@@ -145,6 +175,8 @@ pub(crate) fn advance_local_physics(
         collisions.registry(stream.network_id_mode()),
         stream.current_dimension(),
     );
+    #[cfg(feature = "local-mods")]
+    physics.set_movement_assist(assist);
     let advanced = locals.advance(
         frame,
         &mut physics,

@@ -24,9 +24,23 @@ pub(crate) struct ModAssist {
     pub auto_sprint: bool,
     pub debounce_ms: Option<f32>,
     pub scope: Option<(u64, i32)>,
+    pub motion: super::motion::MotionPolicy,
+    pub auto_totem: Option<f32>,
 }
 
 impl ModAssist {
+    pub fn motion_for(&self, session: u64, dimension: i32) -> super::motion::MotionPolicy {
+        if self.scope == Some((session, dimension)) {
+            self.motion
+        } else {
+            super::motion::MotionPolicy::default()
+        }
+    }
+
+    pub fn auto_totem_for(&self, session: u64, dimension: i32) -> Option<f32> {
+        self.auto_totem.filter(|_| self.scope == Some((session, dimension)))
+    }
+
     pub fn auto_sprint_for(&self, session: u64, dimension: i32) -> bool {
         self.auto_sprint && self.scope == Some((session, dimension))
     }
@@ -336,5 +350,26 @@ mod sprint_scope_tests {
         policy.scope = Some((7, 0));
         policy.auto_sprint = false;
         assert!(!policy.auto_sprint_for(7, 0));
+    }
+
+    #[test]
+    fn motion_and_totem_policies_cannot_cross_player_sessions_or_dimensions() {
+        let motion = super::super::motion::MotionPolicy {
+            fly: Some(10.0),
+            no_fall: true,
+            ..Default::default()
+        };
+        let policy = ModAssist {
+            motion,
+            auto_totem: Some(12.0),
+            scope: Some((7, 0)),
+            ..ModAssist::default()
+        };
+        assert_eq!(policy.motion_for(7, 0), motion);
+        assert_eq!(policy.auto_totem_for(7, 0), Some(12.0));
+        for (session, dimension) in [(8, 0), (7, 1)] {
+            assert_eq!(policy.motion_for(session, dimension), Default::default());
+            assert_eq!(policy.auto_totem_for(session, dimension), None);
+        }
     }
 }

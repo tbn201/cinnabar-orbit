@@ -74,6 +74,21 @@ impl PlayerInventoryLedger {
         self.submit_built(built, personal_generation)
     }
 
+    pub fn begin_world_offhand_equip(&mut self, slot: u8) -> Result<i32, InventoryGestureError> {
+        let (source, destination) = (Cell::Inventory(slot), Cell::Offhand);
+        let personal_generation = self.gesture_preflight(false)?;
+        self.check_surfaces([source, destination])?;
+        let from = self
+            .movable(source)?
+            .ok_or(InventoryGestureError::EmptyGesture)?;
+        let identity = self.window_address();
+        let built = match self.movable(destination)? {
+            Some(to) => swap(source, destination, &from.stack, &to.stack, identity)?,
+            None => place(source, destination, &from, identity)?,
+        };
+        self.submit_built(built, personal_generation)
+    }
+
     /// Drops `amount` (or the whole stack) from a cell or the cursor.
     pub fn begin_drop(
         &mut self,

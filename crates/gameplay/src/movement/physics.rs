@@ -264,6 +264,7 @@ pub struct LocalPhysicsController {
     last_environment: sim::MovementEnvironment,
     dimension_waiting: bool,
     pub(super) prediction_sync: super::prediction_sync::PredictionSyncCountdown,
+    assist: sim::MovementAssist,
 }
 
 impl Default for LocalPhysicsController {
@@ -301,6 +302,7 @@ impl Default for LocalPhysicsController {
             last_environment: sim::MovementEnvironment::default(),
             dimension_waiting: false,
             prediction_sync: Default::default(),
+            assist: sim::MovementAssist::default(),
         }
     }
 }
@@ -475,6 +477,15 @@ impl LocalPhysicsController {
             && !self.dimension_waiting
     }
 
+    pub fn set_movement_assist(&mut self, assist: sim::MovementAssist) {
+        self.assist = assist;
+    }
+
+    #[must_use]
+    pub const fn movement_assist(&self) -> sim::MovementAssist {
+        self.assist
+    }
+
     /// Advances only when a finite, simulable server motion enters live prediction.
     pub const fn knockback_sequence(&self) -> u64 {
         self.knockback_sequence
@@ -545,6 +556,7 @@ impl LocalPhysicsController {
         input.depth_strider = context.mode_intent.depth_strider;
         input.soul_speed = context.mode_intent.soul_speed;
         input.swift_sneak = context.mode_intent.swift_sneak;
+        input.assist = self.assist;
         for tick_index in 0..allowed {
             // Bedrock auto-jump semantics treat a held jump as a fresh request
             // once the player is grounded again. Preserve the render-frame edge
@@ -752,7 +764,9 @@ impl LocalPhysicsController {
                         grounded_before_tick,
                         grounded_after_tick: state.on_ground,
                         horizontal_collision: result.collisions.x || result.collisions.z,
-                        vertical_collision: result.collisions.y,
+                        vertical_collision: input
+                            .assist
+                            .reports_vertical_collision(result.collisions.y, result.velocity.y),
                         jump_repeated,
                         processed,
                         world_identity,

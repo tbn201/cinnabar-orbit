@@ -664,7 +664,9 @@ pub fn resolve_camera_pose(
     let rotation = settings
         .death_rotation()
         .unwrap_or_else(|| view.camera_rotation());
-    let transform = if let Some(stream) = client_world.stream.as_ref() {
+    let transform = if let Some(eye) = settings.free_camera() {
+        perspective_pose(eye, view.camera_rotation(), PerspectiveMode::FirstPerson)
+    } else if let Some(stream) = client_world.stream.as_ref() {
         let collision_world = sim::PaletteWorld::new(
             stream.collision_store(),
             collisions.registry(stream.network_id_mode()),
@@ -672,6 +674,16 @@ pub fn resolve_camera_pose(
             Default::default(),
         );
         match settings.rig() {
+            Some(rig) if settings.rig_keeps_perspective() => {
+                let mut pose = collision_safe_perspective_pose(
+                    view.eye_translation(),
+                    rotation,
+                    perspective,
+                    &collision_world,
+                );
+                pose.translation += pose.rotation * rig.offset;
+                pose
+            }
             Some(rig) => collision_safe_rig_pose(
                 view.eye_translation(),
                 view.camera_rotation(),

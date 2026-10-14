@@ -28,6 +28,8 @@ pub struct CameraSettingsAuthority {
     rig: Option<CameraRig>,
     preserve_teleport_rotation: bool,
     view_scale: [f32; 2],
+    free_camera: Option<Vec3>,
+    rig_keeps_perspective: bool,
 }
 
 /// A local mod's third-person boom: camera-local blocks (x right, y up, z back), roll and FOV change.
@@ -95,6 +97,8 @@ impl Default for CameraSettingsAuthority {
             rig: None,
             preserve_teleport_rotation: false,
             view_scale: [1.0, 1.0],
+            free_camera: None,
+            rig_keeps_perspective: false,
         }
     }
 }
@@ -167,7 +171,8 @@ impl CameraSettingsAuthority {
     /// shows; a chosen third-person mode is kept.
     #[must_use]
     pub const fn perspective(&self) -> PerspectiveMode {
-        if self.rig.is_some()
+        if (self.rig.is_some() && !self.rig_keeps_perspective)
+            || self.free_camera.is_some()
             || self.freelook
             || (self.death_rotation.is_some()
                 && matches!(self.perspective, PerspectiveMode::FirstPerson))
@@ -199,6 +204,24 @@ impl CameraSettingsAuthority {
             let (yaw, _, _) = rotation.to_euler(EulerRot::YXZ);
             Quat::from_rotation_y(yaw)
         });
+    }
+
+    pub fn set_rig_keeps_perspective(&mut self, keeps: bool) {
+        self.rig_keeps_perspective = keeps;
+    }
+
+    #[must_use]
+    pub const fn rig_keeps_perspective(&self) -> bool {
+        self.rig_keeps_perspective
+    }
+
+    pub fn set_free_camera(&mut self, eye: Option<Vec3>) {
+        self.free_camera = eye.filter(|eye| eye.is_finite());
+    }
+
+    #[must_use]
+    pub const fn free_camera(&self) -> Option<Vec3> {
+        self.free_camera
     }
 
     #[must_use]
@@ -276,6 +299,8 @@ impl CameraSettingsAuthority {
         self.death_rotation = None;
         self.preserve_teleport_rotation = false;
         self.view_scale = [1.0, 1.0];
+        self.free_camera = None;
+        self.rig_keeps_perspective = false;
     }
 }
 

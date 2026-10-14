@@ -62,6 +62,7 @@ impl CompletedMotionTick {
                 sneaking: sample.processed.sneaking,
                 mode: sample.processed.mode,
                 walks: sample.vertical_collision
+                    && (sample.grounded_after_tick || !frame.input.assist.reports_ground())
                     && !sample.processed.sneaking
                     && !frame.input.immobile
                     && !matches!(

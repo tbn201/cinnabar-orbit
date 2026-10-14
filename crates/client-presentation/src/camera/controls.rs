@@ -174,7 +174,9 @@ pub fn update_look(
     mut server: Option<ResMut<ServerCameraView>>,
 ) {
     let death_view = settings.death_view();
-    let held = input.phase(Action::Freelook).held && !auto_fly.presentation_paused() && !death_view;
+    let held = (input.phase(Action::Freelook).held || settings.free_camera().is_some())
+        && !auto_fly.presentation_paused()
+        && !death_view;
     if settings.freelook != held {
         smoother.reset();
     }

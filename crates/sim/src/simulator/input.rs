@@ -82,6 +82,47 @@ pub struct MovementInput {
     pub fly_speed: Option<f64>,
     #[serde(default, skip_serializing_if = "VerticalPhysics::is_default")]
     pub vertical_physics: VerticalPhysics,
+    #[serde(default, skip_serializing_if = "MovementAssist::is_default")]
+    pub assist: MovementAssist,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MovementAssist {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fly_velocity: Option<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_height: Option<f64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub wall_climb: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_fall: bool,
+}
+
+impl MovementAssist {
+    pub const MAX_STEP_HEIGHT: f64 = 2.5;
+
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    #[must_use]
+    pub const fn reports_ground(self) -> bool {
+        self.no_fall || self.fly_velocity.is_some()
+    }
+
+    #[must_use]
+    pub fn reports_vertical_collision(self, collided: bool, velocity_y: f64) -> bool {
+        collided || (self.reports_ground() && velocity_y < 0.0)
+    }
+
+    fn valid(self) -> bool {
+        self.fly_velocity
+            .is_none_or(|velocity| velocity.iter().all(|axis| axis.is_finite() && axis.abs() <= 4.0))
+            && self
+                .step_height
+                .is_none_or(|height| height.is_finite() && (0.0..=Self::MAX_STEP_HEIGHT).contains(&height))
+    }
 }
 
 impl MovementInput {
@@ -161,6 +202,9 @@ pub(super) fn validate(input: MovementInput) -> Result<(), SimulationError> {
         .any(|value| !value.is_finite())
         || input.fly_speed.is_some_and(|value| value < 0.0)
     {
+        return Err(SimulationError::InvalidMovementSpeed);
+    }
+    if !input.assist.valid() {
         return Err(SimulationError::InvalidMovementSpeed);
     }
     Ok(())

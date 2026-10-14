@@ -380,6 +380,7 @@ pub fn run_frame(
         claimed.extend(runtime.host(index).reserved_keys().iter().cloned());
         let host = runtime.host_mut(index);
         let available = assist_capabilities(host.grants());
+        let extended = extended_capabilities(host.grants());
         let incoming = input
             .previous_cues
             .iter()
@@ -389,8 +390,15 @@ pub fn run_frame(
                     super::orbit_pings::HEADER | super::orbit_pings::ROW
                 ) || host.grants().players
             })
+            .filter(|cue| {
+                cue.name != super::orbit_base_finder::BASE
+                    || extended & super::orbit_base_finder::CAPABILITY != 0
+            })
             .cloned()
             .map(|mut cue| {
+                if let Some(values) = extended_ready_values(&cue.name, extended) {
+                    cue.values = values;
+                }
                 if cue.name == super::orbit_aim_assist::READY {
                     cue.values = vec![1.0, u8::from(aim_capability(host.grants())) as f32];
                 }
@@ -497,6 +505,15 @@ pub struct Merged {
     pub debounce_ms: Option<f32>,
     pub open_closet: bool,
     pub hitbox: Option<super::orbit_hitbox::HitboxPolicy>,
+    pub extended_capabilities: u16,
+    pub auto_totem: Option<super::orbit_auto_totem::Policy>,
+    pub freecam: Option<super::orbit_freecam::Policy>,
+    pub fly: Option<super::orbit_fly::Policy>,
+    pub no_fall: bool,
+    pub spider: bool,
+    pub step: Option<super::orbit_step::Policy>,
+    pub base_finder: Option<super::orbit_base_finder::Policy>,
+    pub first_person_rig: bool,
 }
 
 impl Merged {
@@ -509,6 +526,7 @@ impl Merged {
         self.attack_pulse |= interaction.attack_pulse;
         let delta = host.take_camera_delta();
         self.delta = self.delta.or(delta);
+        let owns_rig = self.rig.is_none() && host.camera_rig().is_some();
         self.rig = self.rig.or(host.camera_rig());
         self.preserve_teleport_rotation |= host.preserves_teleport_rotation();
         self.view_scale = self.view_scale.or(host.camera_view_scale());
@@ -527,7 +545,16 @@ impl Merged {
         self.assist_capabilities |= available;
         let aim_ready = host.is_active() && aim_capability(host.grants());
         self.aim_ready |= aim_ready;
+        let extended = if host.is_active() {
+            extended_capabilities(host.grants())
+        } else {
+            0
+        };
+        self.extended_capabilities |= extended;
         for cue in host.take_cues() {
+            if self.absorb_extended(&cue, extended, owns_rig) {
+                continue;
+            }
             match cue.name.as_str() {
                 protocol::POLICY => {
                     if let Some(policy) = Policy::parse(&cue.values) {
@@ -591,6 +618,99 @@ impl Merged {
             }
         }
     }
+}
+
+impl Merged {
+    fn absorb_extended(&mut self, cue: &ModCue, extended: u16, owns_rig: bool) -> bool {
+        use super::{
+            orbit_auto_totem as totem, orbit_base_finder as base, orbit_camera_rig as rig,
+            orbit_fly as fly, orbit_freecam as freecam, orbit_no_fall as no_fall,
+            orbit_spider as spider, orbit_step as step,
+        };
+        let granted = |bit: u16| extended & bit != 0;
+        match cue.name.as_str() {
+            totem::REQUEST if granted(totem::CAPABILITY) => {
+                if let Some(policy) = totem::Policy::parse(&cue.values) {
+                    self.auto_totem.get_or_insert(policy);
+                }
+            }
+            freecam::REQUEST if granted(freecam::CAPABILITY) => {
+                if let Some(policy) = freecam::Policy::parse(&cue.values) {
+                    self.freecam.get_or_insert(policy);
+                }
+            }
+            fly::REQUEST if granted(fly::CAPABILITY) => {
+                if let Some(policy) = fly::Policy::parse(&cue.values) {
+                    self.fly.get_or_insert(policy);
+                }
+            }
+            no_fall::REQUEST if granted(no_fall::CAPABILITY) => {
+                self.no_fall |= no_fall::requested(&cue.values);
+            }
+            spider::REQUEST if granted(spider::CAPABILITY) => {
+                self.spider |= spider::requested(&cue.values);
+            }
+            step::REQUEST if granted(step::CAPABILITY) => {
+                if let Some(policy) = step::Policy::parse(&cue.values) {
+                    self.step.get_or_insert(policy);
+                }
+            }
+            base::REQUEST if granted(base::CAPABILITY) => {
+                if let Some(policy) = base::Policy::parse(&cue.values) {
+                    self.base_finder.get_or_insert(policy);
+                }
+            }
+            rig::REQUEST if granted(rig::CAPABILITY) => {
+                self.first_person_rig |= owns_rig && rig::requested(&cue.values);
+            }
+            totem::REQUEST | freecam::REQUEST | fly::REQUEST | no_fall::REQUEST
+            | spider::REQUEST | step::REQUEST | base::REQUEST | base::BASE | rig::REQUEST => {}
+            name => return extended_ready_values(name, u16::MAX).is_some(),
+        }
+        true
+    }
+}
+
+pub const EXTENDED_READY: [(&str, u16); 8] = [
+    (super::orbit_auto_totem::READY, super::orbit_auto_totem::CAPABILITY),
+    (super::orbit_freecam::READY, super::orbit_freecam::CAPABILITY),
+    (super::orbit_fly::READY, super::orbit_fly::CAPABILITY),
+    (super::orbit_no_fall::READY, super::orbit_no_fall::CAPABILITY),
+    (super::orbit_spider::READY, super::orbit_spider::CAPABILITY),
+    (super::orbit_step::READY, super::orbit_step::CAPABILITY),
+    (super::orbit_base_finder::READY, super::orbit_base_finder::CAPABILITY),
+    (super::orbit_camera_rig::READY, super::orbit_camera_rig::CAPABILITY),
+];
+
+pub fn extended_ready_values(name: &str, capabilities: u16) -> Option<Vec<f32>> {
+    EXTENDED_READY
+        .iter()
+        .find(|(ready, _)| *ready == name)
+        .map(|(_, bit)| vec![1.0, f32::from(u8::from(capabilities & bit != 0))])
+}
+
+pub fn extended_capabilities(grants: &ModGrants) -> u16 {
+    let bit = |granted: bool, capability: u16| u16::from(granted) * capability;
+    bit(
+        grants.controls && grants.player_state && grants.item_use,
+        super::orbit_auto_totem::CAPABILITY,
+    ) | bit(
+        grants.camera && grants.controls && grants.movement,
+        super::orbit_freecam::CAPABILITY,
+    ) | bit(
+        grants.movement && grants.controls,
+        super::orbit_fly::CAPABILITY,
+    ) | bit(grants.movement, super::orbit_no_fall::CAPABILITY)
+        | bit(
+            grants.movement && grants.controls,
+            super::orbit_spider::CAPABILITY,
+        )
+        | bit(grants.movement, super::orbit_step::CAPABILITY)
+        | bit(
+            grants.player_state && grants.render,
+            super::orbit_base_finder::CAPABILITY,
+        )
+        | bit(grants.camera, super::orbit_camera_rig::CAPABILITY)
 }
 
 fn aim_capability(grants: &ModGrants) -> bool {
@@ -704,6 +824,118 @@ mod assist_tests {
                     controls && interaction);
             }
         }
+    }
+    #[test]
+    fn extended_features_require_exactly_their_grants() {
+        use super::super::{
+            orbit_auto_totem as totem, orbit_base_finder as base, orbit_fly as fly,
+            orbit_freecam as freecam, orbit_no_fall as no_fall, orbit_spider as spider,
+            orbit_step as step,
+        };
+        let cases: [(u16, ModGrants); 8] = [
+            (totem::CAPABILITY, ModGrants { controls: true, player_state: true, item_use: true, ..ModGrants::default() }),
+            (freecam::CAPABILITY, ModGrants { camera: true, controls: true, movement: true, ..ModGrants::default() }),
+            (fly::CAPABILITY, ModGrants { movement: true, controls: true, ..ModGrants::default() }),
+            (no_fall::CAPABILITY, ModGrants { movement: true, ..ModGrants::default() }),
+            (spider::CAPABILITY, ModGrants { movement: true, controls: true, ..ModGrants::default() }),
+            (step::CAPABILITY, ModGrants { movement: true, ..ModGrants::default() }),
+            (base::CAPABILITY, ModGrants { player_state: true, render: true, ..ModGrants::default() }),
+            (super::super::orbit_camera_rig::CAPABILITY, ModGrants { camera: true, ..ModGrants::default() }),
+        ];
+        for (bit, granted) in cases {
+            assert_ne!(extended_capabilities(&granted) & bit, 0);
+            let fields = [
+                granted.controls, granted.player_state, granted.item_use, granted.camera,
+                granted.movement, granted.render,
+            ];
+            for field in (0..fields.len()).filter(|field| fields[*field]) {
+                let mut missing = granted.clone();
+                match field {
+                    0 => missing.controls = false,
+                    1 => missing.player_state = false,
+                    2 => missing.item_use = false,
+                    3 => missing.camera = false,
+                    4 => missing.movement = false,
+                    _ => missing.render = false,
+                }
+                assert_eq!(extended_capabilities(&missing) & bit, 0);
+            }
+        }
+        assert_eq!(extended_capabilities(&ModGrants::default()), 0);
+        let mut bits = EXTENDED_READY.map(|(_, bit)| bit);
+        bits.sort_unstable();
+        assert!(bits.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(bits.iter().all(|bit| bit.count_ones() == 1 && *bit > 255));
+    }
+    #[test]
+    fn extended_readiness_is_filtered_per_receiver() {
+        use super::super::orbit_fly as fly;
+        assert_eq!(extended_ready_values(fly::READY, fly::CAPABILITY), Some(vec![1.0, 1.0]));
+        assert_eq!(extended_ready_values(fly::READY, 0), Some(vec![1.0, 0.0]));
+        assert_eq!(extended_ready_values(fly::REQUEST, u16::MAX), None);
+    }
+    #[test]
+    fn extended_requests_need_grants_and_guest_readiness_is_discarded() {
+        use super::super::{
+            orbit_auto_totem as totem, orbit_base_finder as base, orbit_fly as fly,
+            orbit_freecam as freecam, orbit_no_fall as no_fall, orbit_spider as spider,
+            orbit_step as step,
+        };
+        let cue = |name: &str, values: &[f32]| ModCue { name: name.into(), values: values.to_vec() };
+        let requests = [
+            cue(totem::REQUEST, &[1.0, 12.0]),
+            cue(freecam::REQUEST, &[1.0, 10.0]),
+            cue(fly::REQUEST, &[1.0, 11.0]),
+            cue(no_fall::REQUEST, &[1.0]),
+            cue(spider::REQUEST, &[1.0]),
+            cue(step::REQUEST, &[1.0, 1.5]),
+            cue(base::REQUEST, &[1.0, 5.0]),
+        ];
+        let mut denied = Merged::default();
+        for request in &requests {
+            assert!(denied.absorb_extended(request, 0, true));
+        }
+        assert!(denied.auto_totem.is_none() && denied.freecam.is_none() && denied.fly.is_none());
+        assert!(!denied.no_fall && !denied.spider && denied.step.is_none());
+        assert!(denied.base_finder.is_none());
+        let mut merged = Merged::default();
+        for request in &requests {
+            assert!(merged.absorb_extended(request, u16::MAX, true));
+        }
+        assert_eq!(merged.auto_totem, Some(totem::Policy { health: 12.0 }));
+        assert_eq!(merged.freecam, Some(freecam::Policy { speed: 10.0 }));
+        assert_eq!(merged.fly, Some(fly::Policy { speed: 11.0 }));
+        assert!(merged.no_fall && merged.spider);
+        assert_eq!(merged.step, Some(step::Policy { height: 1.5 }));
+        assert_eq!(merged.base_finder, Some(base::Policy { sensitivity: 5.0 }));
+        assert!(merged.absorb_extended(&cue(fly::READY, &[1.0, 1.0]), u16::MAX, true));
+        assert!(merged.absorb_extended(&cue(base::BASE, &[1.0, 0.0, 0.0, 0.0, 9.0, 1.0]), u16::MAX, true));
+        assert!(!merged.absorb_extended(&cue("orbit.other", &[1.0]), u16::MAX, true));
+        let mut malformed = Merged::default();
+        malformed.absorb_extended(&cue(no_fall::REQUEST, &[2.0]), u16::MAX, true);
+        malformed.absorb_extended(&cue(fly::REQUEST, &[1.0, 31.0]), u16::MAX, true);
+        assert!(!malformed.no_fall && malformed.fly.is_none());
+    }
+    #[test]
+    fn first_person_rig_applies_only_to_the_granted_rig_owner() {
+        use super::super::orbit_camera_rig as rig;
+        let request = ModCue { name: rig::REQUEST.into(), values: rig::values().to_vec() };
+        let camera = ModGrants { camera: true, ..ModGrants::default() };
+        assert_ne!(extended_capabilities(&camera) & rig::CAPABILITY, 0);
+        assert_eq!(extended_capabilities(&ModGrants::default()) & rig::CAPABILITY, 0);
+        let mut other = Merged::default();
+        assert!(other.absorb_extended(&request, rig::CAPABILITY, false));
+        assert!(!other.first_person_rig);
+        let mut denied = Merged::default();
+        assert!(denied.absorb_extended(&request, 0, true));
+        assert!(!denied.first_person_rig);
+        let mut malformed = Merged::default();
+        let bad = ModCue { name: rig::REQUEST.into(), values: vec![1.0, 0.0] };
+        assert!(malformed.absorb_extended(&bad, rig::CAPABILITY, true));
+        assert!(!malformed.first_person_rig);
+        let mut owner = Merged::default();
+        assert!(owner.absorb_extended(&request, rig::CAPABILITY, true));
+        assert!(owner.first_person_rig);
     }
     #[test]
     fn hitbox_support_requires_render_and_interaction_authority() {

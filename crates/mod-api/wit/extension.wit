@@ -78,6 +78,9 @@ interface player-state {
         session: u64, dimension: s32,
         /// Actor YXZ degrees: yaw left and pitch up. Velocity is blocks per simulation tick.
         yaw: f32, pitch: f32, velocity: tuple<f32, f32, f32>, on-ground: bool,
+        /// Monotonic server simulation tick for this physics sample. Advances once per 50 ms
+        /// server tick; use differences for precise elapsed-time and distance measurements.
+        tick: u64,
     }
     record food {nutrition: u32, saturation-modifier: f32}
     record vitals {

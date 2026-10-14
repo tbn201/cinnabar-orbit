@@ -3,6 +3,7 @@ mod controls;
 mod effects;
 mod environment;
 mod flight;
+mod hover;
 mod immobile;
 mod input;
 mod inside;
@@ -25,7 +26,7 @@ use environment::sample;
 pub use controls::{ControlledTickResult, ProcessedControls};
 pub use effects::{MovementEffects, VerticalPhysics};
 pub use environment::MAX_BLOCK_SAMPLES_PER_TICK;
-pub use input::MovementInput;
+pub use input::{MovementAssist, MovementInput};
 pub use mode::{MovementMode, pose_fits};
 pub use state::{AxisCollisions, MovementEnvironment, PlayerState, SimulationError, TickResult};
 pub use water::{sample_liquid_submersion, sample_water_head};
@@ -175,6 +176,10 @@ impl Simulator {
 
         if input.spectator {
             return spectator::tick(next, state, input, world.registry_identity());
+        }
+        if let Some(velocity) = input.assist.fly_velocity {
+            let [x, y, z] = velocity;
+            return hover::tick(next, state, input, controls, Vec3::new(x, y, z), world);
         }
 
         if !input.jumping {
@@ -337,12 +342,14 @@ impl Simulator {
             }
         }
 
-        if sampled.movement.on_climbable {
+        let wall_contact = retained_collisions.x || retained_collisions.z;
+        let spider_hold = input.assist.wall_climb && wall_contact && input.sneaking;
+        if sampled.movement.on_climbable || (input.assist.wall_climb && wall_contact) {
             next.velocity.y = next.velocity.y.max(-CLIMB_SPEED);
             // `bedsim v0.1.3` `simulateMovement` ascends a climbable block on a
             // held jump *or* on the previous tick's horizontal collision, which
             // is how walking into a ladder climbs it.
-            let wall_climb = retained_collisions.x || retained_collisions.z;
+            let wall_climb = wall_contact && !spider_hold;
             if climb_jump || wall_climb {
                 next.velocity.y = CLIMB_SPEED;
             } else if input.sneaking && next.velocity.y < 0.0 {
@@ -393,6 +400,7 @@ impl Simulator {
             collision_box,
             next.velocity,
             grounded_at_start,
+            input.assist.step_height.unwrap_or(STEP_HEIGHT),
         )?;
         identity = identity.merge(&motion.identity)?;
         next.position = motion.position;
@@ -463,15 +471,17 @@ impl Simulator {
             && !sampled.movement.in_lava
             && (motion.collisions.x || motion.collisions.z)
         {
-            let feet = environment::sample_primary(
-                world,
-                environment::block_at(next.position)?,
-                &mut sampled.block_samples,
-            )?;
-            identity = identity.merge(&feet.identity)?;
-            feet.value
-                .flags
-                .contains(crate::BlockPhysicsFlags::CLIMBABLE)
+            (input.assist.wall_climb && !input.sneaking) || {
+                let feet = environment::sample_primary(
+                    world,
+                    environment::block_at(next.position)?,
+                    &mut sampled.block_samples,
+                )?;
+                identity = identity.merge(&feet.identity)?;
+                feet.value
+                    .flags
+                    .contains(crate::BlockPhysicsFlags::CLIMBABLE)
+            }
         } else {
             false
         };
