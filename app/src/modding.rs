@@ -324,6 +324,7 @@ struct ModObservation<'w, 's> {
         With<client_presentation::camera::FlyCamera>,
     >,
     frame_rate: Local<'s, presentation_facts::FrameRate>,
+    aim: Local<'s, aim_assist::Aim>,
     miner: Local<'s, autominer::Miner>,
     module_observer: Local<'s, module_observations::ModuleObserver>,
     actor_style: Option<ResMut<'w, client_presentation::actor_publication::ActorPresentationStyle>>,
@@ -357,6 +358,7 @@ fn drive_mod(
         mut render_scene,
         cameras,
         mut frame_rate,
+        mut aim,
         mut miner,
         mut module_observer,
         mut actor_style,
@@ -546,6 +548,8 @@ fn drive_mod(
     interaction.hitbox = hitbox;
     interaction.attack_reach = merged.attack_reach;
     interaction.attack_pulse = merged.attack_pulse && gameplay.pulse_attack();
+    let aiming = merged.aim_assist.filter(|_| focused && captured && !absorbed && merged.autominer.is_none() && merged.delta.is_none() && world_observation.as_ref().is_some_and(|world| world.alive));
+    if let Some(delta) = aim_assist::drive(&gameplay, &ui, &mut aim, aiming) { gameplay.apply(delta); }
     if let Some(delta) = merged.delta {
         gameplay.apply(delta);
     }
@@ -570,8 +574,9 @@ fn drive_mod(
     }
     if let Some(mut cues) = cues {
         cues.0 = merged.cues;
-        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 6);
+        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 7);
         let bits = merged.assist_capabilities;
+        cues.0.push(mod_host::ModCue { name: client_extensions::modding::orbit_aim_assist::READY.into(), values: vec![1.0, u8::from(merged.aim_ready) as f32] });
         cues.0.push(mod_host::ModCue {
             name: client_extensions::modding::orbit_autominer::READY.into(),
             values: vec![1.0, u8::from(bits & client_extensions::modding::orbit_autominer::CAPABILITY != 0) as f32],
@@ -829,6 +834,8 @@ mod tests {
 #[cfg(all(test, feature = "local-mods"))]
 mod time_changer_tests;
 
+#[cfg(feature = "local-mods")]
+mod aim_assist;
 #[cfg(feature = "local-mods")]
 mod autominer;
 #[cfg(feature = "local-mods")]

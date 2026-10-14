@@ -391,6 +391,9 @@ pub fn run_frame(
             })
             .cloned()
             .map(|mut cue| {
+                if cue.name == super::orbit_aim_assist::READY {
+                    cue.values = vec![1.0, u8::from(aim_capability(host.grants())) as f32];
+                }
                 if cue.name == super::orbit_autominer::READY {
                     cue.values = vec![1.0, u8::from(available & super::orbit_autominer::CAPABILITY != 0) as f32];
                 }
@@ -487,6 +490,8 @@ pub struct Merged {
     pub auto_hotbar: Option<(bool, bool)>,
     pub toggle_sprint: bool,
     pub auto_sprint: bool,
+    pub aim_assist: Option<super::orbit_aim_assist::Policy>,
+    pub aim_ready: bool,
     pub autominer: Option<super::orbit_autominer::Policy>,
     pub autoclicker: Option<super::orbit_autoclicker::Policy>,
     pub debounce_ms: Option<f32>,
@@ -520,6 +525,8 @@ impl Merged {
         let hotbar = available & protocol::HOTBAR != 0;
         let sprint = available & protocol::SPRINT != 0;
         self.assist_capabilities |= available;
+        let aim_ready = host.is_active() && aim_capability(host.grants());
+        self.aim_ready |= aim_ready;
         for cue in host.take_cues() {
             match cue.name.as_str() {
                 protocol::POLICY => {
@@ -531,6 +538,14 @@ impl Merged {
                         self.toggle_sprint |= sprint && policy.toggle_sprint;
                     }
                 }
+                super::orbit_aim_assist::REQUEST => {
+                    if aim_ready {
+                        if let Some(policy) = super::orbit_aim_assist::Policy::parse(&cue.values) {
+                            self.aim_assist.get_or_insert(policy);
+                        }
+                    }
+                }
+                super::orbit_aim_assist::READY => {}
                 super::orbit_autominer::REQUEST => {
                     if available & super::orbit_autominer::CAPABILITY != 0 {
                         if let Some(policy) = super::orbit_autominer::Policy::parse(&cue.values) {
@@ -576,6 +591,10 @@ impl Merged {
             }
         }
     }
+}
+
+fn aim_capability(grants: &ModGrants) -> bool {
+    grants.controls && grants.camera && grants.players && grants.entities
 }
 
 fn assist_capabilities(grants: &ModGrants) -> u8 {
@@ -651,6 +670,17 @@ mod assist_tests {
         );
         grants.controls = false;
         assert_eq!(assist_capabilities(&grants), 0);
+    }
+    #[test]
+    fn aim_assist_requires_camera_and_both_actor_observation_grants() {
+        let granted = ModGrants { controls:true, camera:true, players:true, entities:true, ..Default::default() };
+        assert!(aim_capability(&granted));
+        for field in 0..4 {
+            let mut missing = granted.clone();
+            match field { 0 => missing.controls=false, 1 => missing.camera=false,
+                2 => missing.players=false, _ => missing.entities=false }
+            assert!(!aim_capability(&missing));
+        }
     }
     #[test]
     fn autominer_requires_controls_camera_interaction_and_item_authority() {
