@@ -64,6 +64,8 @@ pub(crate) fn produce_melee(
     mut swings: ResMut<SwingTracker>,
     mut movement: ResMut<MovementTicker>,
     mut view: ResMut<client_presentation::local_player::LocalViewPose>,
+    #[cfg(feature = "local-mods")]
+    mut clicker: bevy::prelude::Local<client_extensions::modding::orbit_autoclicker::Clicker>,
 ) {
     let item_timing = selected_attack_timing(&player_runtime, &context.client_world);
     swings.sync_ticks_for_item(
@@ -82,6 +84,8 @@ pub(crate) fn produce_melee(
     };
     let Some(input) = context.input.snapshot() else {
         runtime.cancel();
+        #[cfg(feature = "local-mods")]
+        clicker.reset();
         return;
     };
     let now_millis = u64::try_from(context.time.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -93,16 +97,22 @@ pub(crate) fn produce_melee(
     ) {
         drop(reason);
         runtime.cancel();
+        #[cfg(feature = "local-mods")]
+        clicker.reset();
         return;
     }
     if !runtime.observe_input(attack.pressed, attack.held) {
         runtime.cancel();
+        #[cfg(feature = "local-mods")]
+        clicker.reset();
         return;
     }
     // A position-authority change is resolving; the press waits for it.
     if !movement.accepts_block_interactions() {
         drop("position_authority_pending");
         runtime.defer(now_millis);
+        #[cfg(feature = "local-mods")]
+        clicker.reset();
         return;
     }
     let caps = player_runtime.facts.game_mode_capabilities();
@@ -124,8 +134,25 @@ pub(crate) fn produce_melee(
     ) else {
         drop("no_interaction_ray");
         runtime.defer(now_millis);
+        #[cfg(feature = "local-mods")]
+        clicker.reset();
         return;
     };
+    #[cfg(feature = "local-mods")]
+    let automatic = clicker.tick(
+        context.time.elapsed_secs_f64(),
+        (context.ui.session_id(), stream.current_dimension()),
+        attack.held,
+        attack.pressed || context.mod_interaction.as_ref().is_some_and(|policy| policy.attack_pulse),
+        matches!(crosshair, Crosshair::Block),
+        context.mod_interaction.as_ref().and_then(|policy| policy.autoclicker),
+    );
+    #[cfg(not(feature = "local-mods"))]
+    let automatic = false;
+    if !runtime.observe_input(attack.pressed || automatic, attack.held) {
+        runtime.cancel();
+        return;
+    }
     let crosshair = runtime.observe_attack_target(
         crosshair,
         item_timing.is_some_and(|timing| timing.piercing_weapon),

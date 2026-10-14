@@ -535,6 +535,7 @@ fn drive_mod(
     });
     gameplay.synchronize_jump_scope(movement_allowed && captured && !absorbed, &ui);
     gameplay.pulse_jump(merged.jump_pulse && !merged.jump_cancel, &ui);
+    interaction.autoclicker = merged.autoclicker.filter(|_| focused && captured && !absorbed && world_observation.as_ref().is_some_and(|world| world.alive));
     interaction.hitbox = hitbox;
     interaction.attack_reach = merged.attack_reach;
     interaction.attack_pulse = merged.attack_pulse && gameplay.pulse_attack();
@@ -562,8 +563,12 @@ fn drive_mod(
     }
     if let Some(mut cues) = cues {
         cues.0 = merged.cues;
-        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 3);
+        cues.0.truncate(mod_api::MAX_CUES_PER_FRAME - 5);
         let bits = merged.assist_capabilities;
+        cues.0.push(mod_host::ModCue {
+            name: client_extensions::modding::orbit_autoclicker::READY.into(),
+            values: vec![1.0, u8::from(bits & client_extensions::modding::orbit_autoclicker::CAPABILITY != 0) as f32],
+        });
         cues.0.push(mod_host::ModCue {
             name: client_extensions::modding::orbit_hitbox::READY.into(),
             values: vec![

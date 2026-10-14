@@ -391,6 +391,9 @@ pub fn run_frame(
             })
             .cloned()
             .map(|mut cue| {
+                if cue.name == super::orbit_autoclicker::READY {
+                    cue.values = vec![1.0, u8::from(available & super::orbit_autoclicker::CAPABILITY != 0) as f32];
+                }
                 if cue.name == super::orbit_hitbox::READY {
                     cue.values = vec![
                         1.0,
@@ -481,6 +484,7 @@ pub struct Merged {
     pub auto_hotbar: Option<(bool, bool)>,
     pub toggle_sprint: bool,
     pub auto_sprint: bool,
+    pub autoclicker: Option<super::orbit_autoclicker::Policy>,
     pub debounce_ms: Option<f32>,
     pub open_closet: bool,
     pub hitbox: Option<super::orbit_hitbox::HitboxPolicy>,
@@ -523,6 +527,14 @@ impl Merged {
                         self.toggle_sprint |= sprint && policy.toggle_sprint;
                     }
                 }
+                super::orbit_autoclicker::REQUEST => {
+                    if available & super::orbit_autoclicker::CAPABILITY != 0 {
+                        if let Some(policy) = super::orbit_autoclicker::Policy::parse(&cue.values) {
+                            self.autoclicker.get_or_insert(policy);
+                        }
+                    }
+                }
+                super::orbit_autoclicker::READY => {}
                 protocol::AUTO_SPRINT => {
                     self.auto_sprint |= available & protocol::AUTO_SPRINT_CAPABILITY != 0
                         && protocol::auto_sprint_requested(&cue.values);
@@ -560,6 +572,7 @@ fn assist_capabilities(grants: &ModGrants) -> u8 {
         return 0;
     }
     CLOSET
+        | (u8::from(grants.interaction) * super::orbit_autoclicker::CAPABILITY)
         | DEBOUNCE
         | (u8::from(grants.player_state && grants.item_use) * HOTBAR)
         | (u8::from(grants.movement) * (SPRINT | AUTO_SPRINT_CAPABILITY))
@@ -625,6 +638,16 @@ mod assist_tests {
         );
         grants.controls = false;
         assert_eq!(assist_capabilities(&grants), 0);
+    }
+    #[test]
+    fn autoclicker_requires_both_controls_and_interaction_authority() {
+        for controls in [false, true] {
+            for interaction in [false, true] {
+                let grants = ModGrants { controls, interaction, ..ModGrants::default() };
+                assert_eq!(assist_capabilities(&grants) & super::super::orbit_autoclicker::CAPABILITY != 0,
+                    controls && interaction);
+            }
+        }
     }
     #[test]
     fn hitbox_support_requires_render_and_interaction_authority() {

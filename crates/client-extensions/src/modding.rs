@@ -6,6 +6,7 @@ pub mod multi;
 pub mod panel_ui;
 pub mod player_state;
 
+pub mod orbit_autoclicker;
 pub mod orbit_hitbox;
 pub mod orbit_pings;
 pub mod orbit_protocol;

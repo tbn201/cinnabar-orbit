@@ -7,6 +7,7 @@ use bevy::prelude::Resource;
 pub struct ModInteraction {
     pub attack_reach: Option<f32>,
     pub attack_pulse: bool,
+    pub autoclicker: Option<client_extensions::modding::orbit_autoclicker::Policy>,
     pub hitbox: Option<client_extensions::modding::orbit_hitbox::HitboxPolicy>,
 }
 
