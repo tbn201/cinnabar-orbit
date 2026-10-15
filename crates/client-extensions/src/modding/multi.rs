@@ -482,6 +482,8 @@ fn needs_gameplay(grants: &ModGrants) -> bool {
 /// One frame's combined output; for single-valued outputs the earliest mod wins.
 #[derive(Default)]
 pub struct Merged {
+    pub tpaura: Option<super::orbit_tpaura::Policy>,
+    pub tpaura_ready: bool,
     pub rig: Option<GameplayCameraRig>,
     pub preserve_teleport_rotation: bool,
     pub view_scale: Option<[f32; 2]>,
@@ -521,6 +523,7 @@ impl Merged {
     pub fn absorb(&mut self, host: &mut ModHost) {
         self.jump_pulse |= host.take_jump_pulse();
         self.jump_cancel |= host.take_jump_cancel();
+        self.tpaura_ready |= host.is_active() && tpaura_capability(host.grants());
         let interaction = host.take_interaction();
         self.attack_reach = self.attack_reach.or(interaction.attack_reach);
         self.attack_pulse |= interaction.attack_pulse;
@@ -600,6 +603,12 @@ impl Merged {
                         }
                     }
                 }
+                super::orbit_tpaura::REQUEST => {
+                    if host.is_active() && tpaura_capability(host.grants()) {
+                        if let Some(policy) = super::orbit_tpaura::Policy::parse(&cue.values) { self.tpaura.get_or_insert(policy); }
+                    }
+                }
+                super::orbit_tpaura::READY => {}
                 super::orbit_hitbox::REQUEST => {
                     if available & super::orbit_hitbox::CAPABILITY != 0 {
                         if let Some(policy) = super::orbit_hitbox::HitboxPolicy::parse(&cue.values)
@@ -711,6 +720,11 @@ pub fn extended_capabilities(grants: &ModGrants) -> u16 {
             super::orbit_base_finder::CAPABILITY,
         )
         | bit(grants.camera, super::orbit_camera_rig::CAPABILITY)
+}
+
+fn tpaura_capability(grants: &ModGrants) -> bool {
+    grants.controls && grants.camera && grants.movement
+        && grants.interaction && grants.players && grants.entities
 }
 
 fn aim_capability(grants: &ModGrants) -> bool {

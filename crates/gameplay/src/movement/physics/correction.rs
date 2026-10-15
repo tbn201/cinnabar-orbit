@@ -226,6 +226,7 @@ impl LocalPhysicsController {
                 world,
                 &motion_overlays,
                 |state, input, world, previous| {
+                    input.assist.blink_to = None;
                     deferred_corrections.apply_before(state);
                     let frame = controller_frames
                         .iter_mut()

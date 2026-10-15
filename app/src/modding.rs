@@ -325,6 +325,7 @@ struct ModObservation<'w, 's> {
         With<client_presentation::camera::FlyCamera>,
     >,
     frame_rate: Local<'s, presentation_facts::FrameRate>,
+    tpaura: Local<'s, tpaura::Aura>,
     aim: Local<'s, aim_assist::Aim>,
     miner: Local<'s, autominer::Miner>,
     freecam: Local<'s, motion::Freecam>,
@@ -361,6 +362,7 @@ fn drive_mod(
         mut render_scene,
         cameras,
         mut frame_rate,
+        mut tpaura,
         mut aim,
         mut miner,
         mut freecam,
@@ -560,8 +562,15 @@ fn drive_mod(
     }
     send_commands(network.as_deref(), ui.session_id(), merged.commands);
     let alive = world_observation.as_ref().is_some_and(|world| world.alive);
+    let tp_allowed = movement_allowed && alive && focused && captured && !absorbed
+        && !callback_failed && merged.freecam.is_none() && merged.fly.is_none()
+        && merged.autominer.is_none() && merged.aim_assist.is_none()
+        && merged.autoclicker.is_none() && merged.delta.is_none();
+    let tp_policy = merged.tpaura.filter(|_| tp_allowed);
+    let blink_to = tpaura::drive(&mut gameplay, &ui, &mut tpaura, tp_policy, tp_allowed);
     let motion = if movement_allowed && alive {
         motion::MotionPolicy {
+            blink_to,
             freecam: merged.freecam.map(|policy| policy.speed),
             fly: merged.fly.map(|policy| policy.speed),
             no_fall: merged.no_fall,
@@ -650,6 +659,7 @@ fn drive_mod(
                 )),
             ],
         });
+        cues.0.push(mod_host::ModCue { name: client_extensions::modding::orbit_tpaura::READY.into(), values: vec![1.0, u8::from(merged.tpaura_ready) as f32] });
         let extended = merged.extended_capabilities;
         for (name, _) in multi::EXTENDED_READY {
             if let Some(values) = multi::extended_ready_values(name, extended) {
@@ -900,6 +910,8 @@ mod time_changer_tests;
 mod aim_assist;
 #[cfg(feature = "local-mods")]
 mod auto_totem;
+#[cfg(feature = "local-mods")]
+mod tpaura;
 #[cfg(feature = "local-mods")]
 mod autominer;
 #[cfg(feature = "local-mods")]

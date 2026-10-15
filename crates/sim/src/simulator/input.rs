@@ -90,6 +90,8 @@ pub struct MovementInput {
 #[serde(deny_unknown_fields)]
 pub struct MovementAssist {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blink_to: Option<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fly_velocity: Option<[f64; 3]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_height: Option<f64>,
@@ -117,7 +119,8 @@ impl MovementAssist {
     }
 
     fn valid(self) -> bool {
-        self.fly_velocity
+        self.blink_to.is_none_or(|position| position.iter().all(|v| v.is_finite() && v.abs() <= 30_000_000.0))
+            && self.fly_velocity
             .is_none_or(|velocity| velocity.iter().all(|axis| axis.is_finite() && axis.abs() <= 4.0))
             && self
                 .step_height

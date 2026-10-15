@@ -1127,3 +1127,53 @@ fn a_correction_keeps_a_flag_latched_for_the_next_tick() {
         );
     }
 }
+
+#[test]
+fn a_server_correction_does_not_replay_an_old_tpaura_blink() {
+    let world = VersionedFloor(1);
+    let mut physics = LocalPhysicsController::default();
+    physics.reanchor_network_position([0.0, 2.620_01, 0.0], 100, true);
+    let mut samples = Vec::new();
+    let first = physics.advance_with_context(
+        Duration::from_millis(50),
+        sim::MovementInput::default(),
+        PhysicsSampleContext::default(),
+        &world,
+    );
+    let anchor = first.samples[0].clone();
+    samples.extend(first.samples);
+    physics.set_movement_assist(sim::MovementAssist {
+        blink_to: Some([4.0, 1.0, 0.0]),
+        ..Default::default()
+    });
+    let moved = physics.advance_with_context(
+        Duration::from_millis(50),
+        sim::MovementInput::default(),
+        PhysicsSampleContext::default(),
+        &world,
+    );
+    assert!(moved.blocked.is_none(), "{:?}", moved.blocked);
+    assert!((physics.state().unwrap().position.x - 4.0).abs() < 0.001);
+    samples.extend(moved.samples);
+    physics.set_movement_assist(sim::MovementAssist::default());
+    samples.extend(physics.advance_with_context(
+        Duration::from_millis(50),
+        sim::MovementInput::default(),
+        PhysicsSampleContext::default(),
+        &world,
+    ).samples);
+    let mut ticker = ticker_with_samples(samples);
+    let mut correction = anchor.position;
+    correction[0] = 0.05;
+    let outcome = reconcile_candidate_physics_correction(
+        &mut ticker,
+        &mut physics,
+        correction,
+        anchor.tick,
+        true,
+        PhysicsCorrectionMode::ReplayIfRetained,
+        &world,
+    ).unwrap();
+    assert!(matches!(outcome, PhysicsCorrectionOutcome::Replayed { .. }));
+    assert!(physics.state().unwrap().position.x < 0.1);
+}

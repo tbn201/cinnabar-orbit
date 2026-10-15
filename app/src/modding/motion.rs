@@ -8,6 +8,7 @@ const MAX_FRAME_SECONDS: f32 = 0.1;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct MotionPolicy {
+    pub blink_to: Option<[f64; 3]>,
     pub freecam: Option<f32>,
     pub fly: Option<f32>,
     pub no_fall: bool,
@@ -51,6 +52,7 @@ impl MotionPolicy {
         });
         let grounded = fly_velocity.is_none();
         sim::MovementAssist {
+            blink_to: self.blink_to,
             fly_velocity,
             step_height: self
                 .step
@@ -170,6 +172,7 @@ mod tests {
     fn assist_composes_freecam_fly_spider_step_and_no_fall() {
         let walk = steering([0.0, 1.0], false, false);
         let all = MotionPolicy {
+            blink_to: None,
             freecam: Some(10.0),
             fly: Some(10.0),
             no_fall: true,

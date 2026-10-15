@@ -1,3 +1,4 @@
+mod blink;
 mod collision;
 mod controls;
 mod effects;
@@ -176,6 +177,9 @@ impl Simulator {
 
         if input.spectator {
             return spectator::tick(next, state, input, world.registry_identity());
+        }
+        if let Some(destination) = input.assist.blink_to {
+            if let Some(result) = blink::tick(next.clone(), state, input, controls, destination, world)? { return Ok(result); }
         }
         if let Some(velocity) = input.assist.fly_velocity {
             let [x, y, z] = velocity;
